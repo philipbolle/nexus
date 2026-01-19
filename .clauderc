@@ -1,0 +1,42 @@
+# NEXUS - Autonomous AI Operating System
+# Owner: Philip (pbolle123@gmail.com)
+# Location: ~/nexus on PhilipThinkpad
+
+## Tech Stack
+- **Backend:** Python 3.12 + FastAPI (async)
+- **Database:** PostgreSQL 16 + ChromaDB + Redis
+- **Containers:** Docker Compose (8 services)
+- **AI Providers:** Ollama → Groq → DeepSeek → Anthropic
+
+## Architecture
+- Multi-agent orchestration with hierarchical supervision
+- Privacy Shield intercepts all queries locally
+- Cost cascade routing: cheapest capable model first
+- Semantic caching for 60-70% cost reduction
+
+## Database
+- 186 tables, UUID primary keys
+- Schema in `schema/`
+- Fix: `schema/01_NEXUS_SCHEMA_FIX.sql`
+
+## Current Goals
+1. Apply schema fix
+2. Build cost optimization layer
+3. Create Finance Agent
+4. iPhone Quick Expense shortcut
+
+## Conventions
+- async/await for all I/O
+- Pydantic for validation
+- Log all agent actions
+- ALL AI calls through cost router
+
+## DO NOT Modify
+- `.env` (secrets)
+- `data/` (container state)
+
+## Philip's Context
+- Night shift janitor, 6PM-12AM
+- ~$1,800/month, $300-400 to debt
+- $9,700 owed to mom
+- Learning Linux/Python

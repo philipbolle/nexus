@@ -1,0 +1,49 @@
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Data directories
+data/
+logs/
+sync/
+backups/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.log
+*.bak
+
+# NEXUS specific
+*.mp3
+*.wav
+HANDOFF.md
+test_output/
+
+
+config/homeassistant/.storage/auth
+config/homeassistant/.storage/*

@@ -1,0 +1,148 @@
+# NEXUS .gitignore
+# Keep secrets and data OUT of version control
+
+# ═══════════════════════════════════════════════════════════════
+# SECRETS - NEVER COMMIT THESE
+# ═══════════════════════════════════════════════════════════════
+.env
+.env.*
+*.env
+secrets/
+*.pem
+*.key
+*.crt
+
+# ═══════════════════════════════════════════════════════════════
+# DATA DIRECTORIES - Container persistent data
+# ═══════════════════════════════════════════════════════════════
+data/
+logs/
+sync/
+backups/
+
+# ═══════════════════════════════════════════════════════════════
+# PYTHON
+# ═══════════════════════════════════════════════════════════════
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+.env/
+ENV/
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ═══════════════════════════════════════════════════════════════
+# EDITORS AND IDEs
+# ═══════════════════════════════════════════════════════════════
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# ═══════════════════════════════════════════════════════════════
+# OPERATING SYSTEM
+# ═══════════════════════════════════════════════════════════════
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ═══════════════════════════════════════════════════════════════
+# TEMPORARY FILES
+# ═══════════════════════════════════════════════════════════════
+*.tmp
+*.temp
+*.log
+*.bak
+*.backup
+*.old
+
+# ═══════════════════════════════════════════════════════════════
+# NODE.JS (if any frontend)
+# ═══════════════════════════════════════════════════════════════
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# ═══════════════════════════════════════════════════════════════
+# DOCKER
+# ═══════════════════════════════════════════════════════════════
+# Don't ignore docker-compose.yml - that's needed
+# Don't ignore Dockerfile - that's needed
+*.dockerignore
+
+# ═══════════════════════════════════════════════════════════════
+# NEXUS SPECIFIC
+# ═══════════════════════════════════════════════════════════════
+# TTS generated audio (can be regenerated)
+*.mp3
+*.wav
+podcasts/*.mp3
+
+# Large model files
+*.bin
+*.onnx
+*.pt
+*.pth
+
+# Handoff docs (temporary context, not code)
+HANDOFF.md
+
+# Test outputs
+test_output/
+*.test.json
+
+# ═══════════════════════════════════════════════════════════════
+# KEEP THESE (use negation)
+# ═══════════════════════════════════════════════════════════════
+!.gitkeep
+!requirements.txt
+!pyproject.toml
+!docker-compose.yml
+!Dockerfile
+!schema/*.sql
+!.clauderc
