@@ -8,9 +8,11 @@ import httpx
 import time
 import logging
 import hashlib
-from typing import Optional
+import asyncio
+from typing import Optional, Dict, List
 from uuid import UUID
 from dataclasses import dataclass
+from collections import deque
 
 from ..config import settings
 from ..database import db
@@ -18,7 +20,47 @@ from .semantic_cache import check_cache, store_cache
 
 logger = logging.getLogger(__name__)
 
+# Conversation memory for voice sessions (simple in-memory cache)
+_conversation_cache: Dict[str, deque] = {}
+_conversation_lock = asyncio.Lock()
+MAX_CONVERSATION_HISTORY = 3  # Keep last 3 exchanges per session
+
 # Model pricing per million tokens (input, output)
+
+
+async def _get_conversation_context(session_id: Optional[str]) -> str:
+    """Get conversation history for a session."""
+    if not session_id:
+        return ""
+
+    async with _conversation_lock:
+        history = _conversation_cache.get(session_id)
+        if not history:
+            return ""
+
+        # Format as "Previous conversation:\n- User: ...\n- AI: ..."
+        formatted = []
+        for i, (user_msg, ai_msg) in enumerate(history, 1):
+            formatted.append(f"{i}. User: {user_msg}")
+            if ai_msg:
+                formatted.append(f"   AI: {ai_msg}")
+
+        if formatted:
+            return "Previous conversation:\n" + "\n".join(formatted) + "\n\n"
+        return ""
+
+
+async def _update_conversation(session_id: Optional[str], user_message: str, ai_response: str) -> None:
+    """Update conversation history for a session."""
+    if not session_id:
+        return
+
+    async with _conversation_lock:
+        if session_id not in _conversation_cache:
+            _conversation_cache[session_id] = deque(maxlen=MAX_CONVERSATION_HISTORY)
+
+        # Store as tuple (user_message, ai_response)
+        _conversation_cache[session_id].append((user_message, ai_response))
 MODEL_COSTS = {
     "llama-3.3-70b-versatile": (0.59, 0.79),
     "llama-3.1-8b-instant": (0.05, 0.08),
@@ -81,7 +123,7 @@ async def log_usage(
         logger.error(f"Failed to log API usage: {e}")
 
 
-async def query_groq(message: str, model: str = "llama-3.3-70b-versatile", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
+async def query_groq(message: str, model: str = "llama-3.3-70b-versatile", max_tokens: int = 1024, agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
     """Query Groq API (free tier)."""
     if not settings.groq_api_key:
         raise ValueError("GROQ_API_KEY not configured")
@@ -100,7 +142,7 @@ async def query_groq(message: str, model: str = "llama-3.3-70b-versatile", agent
                 "model": model,
                 "messages": [{"role": "user", "content": message}],
                 "temperature": 0.7,
-                "max_tokens": 1024,
+                "max_tokens": max_tokens,
             },
         )
         response.raise_for_status()
@@ -138,7 +180,7 @@ async def query_groq(message: str, model: str = "llama-3.3-70b-versatile", agent
     )
 
 
-async def query_deepseek(message: str, model: str = "deepseek-chat", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
+async def query_deepseek(message: str, model: str = "deepseek-chat", max_tokens: int = 1024, agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
     """Query DeepSeek API (cheap fallback)."""
     if not settings.deepseek_api_key:
         raise ValueError("DEEPSEEK_API_KEY not configured")
@@ -157,7 +199,7 @@ async def query_deepseek(message: str, model: str = "deepseek-chat", agent_id: O
                 "model": model,
                 "messages": [{"role": "user", "content": message}],
                 "temperature": 0.7,
-                "max_tokens": 1024,
+                "max_tokens": max_tokens,
             },
         )
         response.raise_for_status()
@@ -195,7 +237,7 @@ async def query_deepseek(message: str, model: str = "deepseek-chat", agent_id: O
     )
 
 
-async def chat(message: str, preferred_model: Optional[str] = None, agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
+async def chat(message: str, preferred_model: Optional[str] = None, max_tokens: int = 1024, agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
     """
     Route chat to cheapest capable model.
 
@@ -233,7 +275,7 @@ async def chat(message: str, preferred_model: Optional[str] = None, agent_id: Op
     if settings.groq_api_key:
         try:
             model = preferred_model if preferred_model and "llama" in preferred_model else "llama-3.3-70b-versatile"
-            response = await query_groq(message, model, agent_id=agent_id, session_id=session_id)
+            response = await query_groq(message, model, max_tokens=max_tokens, agent_id=agent_id, session_id=session_id)
         except Exception as e:
             logger.warning(f"Groq failed: {e}")
             errors.append(f"groq: {e}")
@@ -241,7 +283,7 @@ async def chat(message: str, preferred_model: Optional[str] = None, agent_id: Op
     # Fall back to DeepSeek
     if response is None and settings.deepseek_api_key:
         try:
-            response = await query_deepseek(message, agent_id=agent_id, session_id=session_id)
+            response = await query_deepseek(message, max_tokens=max_tokens, agent_id=agent_id, session_id=session_id)
         except Exception as e:
             logger.warning(f"DeepSeek failed: {e}")
             errors.append(f"deepseek: {e}")
@@ -259,6 +301,37 @@ async def chat(message: str, preferred_model: Optional[str] = None, agent_id: Op
         output_tokens=response.output_tokens,
         cost_usd=response.cost_usd,
     )
+
+    return response
+
+
+async def chat_voice(message: str, agent_id: Optional[UUID] = None, session_id: Optional[str] = None) -> AIResponse:
+    """
+    Optimized chat for voice queries.
+
+    Uses smaller, faster model with shorter responses.
+    Perfect for iPhone voice assistant.
+    Includes conversation memory for follow-up questions.
+    """
+    # Convert session_id to string if UUID
+    session_str = str(session_id) if session_id else None
+
+    # Get conversation context
+    context = await _get_conversation_context(session_str)
+    full_message = context + message if context else message
+
+    # Get AI response
+    response = await chat(
+        message=full_message,
+        preferred_model="llama-3.1-8b-instant",
+        max_tokens=256,
+        agent_id=agent_id,
+        session_id=session_id
+    )
+
+    # Update conversation history
+    if session_str:
+        await _update_conversation(session_str, message, response.content)
 
     return response
 
