@@ -48,14 +48,24 @@ class DatabaseService:
     
     # ===== Semantic Cache Operations =====
     
-    async def get_semantic_cache(self, query_hash: str) -> Optional[Dict[str, Any]]:
-        """Get a cached response by query hash."""
-        query = """
-            SELECT * FROM semantic_cache 
-            WHERE query_hash = $1 
-            AND (expires_at IS NULL OR expires_at > NOW())
-        """
-        results = await self.execute_query(query, query_hash)
+    async def get_semantic_cache(self, query_hash: str, agent_id: Optional[uuid.UUID] = None) -> Optional[Dict[str, Any]]:
+        """Get a cached response by query hash and optional agent_id."""
+        if agent_id is None:
+            query = """
+                SELECT * FROM semantic_cache
+                WHERE query_hash = $1
+                AND agent_id IS NULL
+                AND (expires_at IS NULL OR expires_at > NOW())
+            """
+            results = await self.execute_query(query, query_hash)
+        else:
+            query = """
+                SELECT * FROM semantic_cache
+                WHERE query_hash = $1
+                AND agent_id = $2
+                AND (expires_at IS NULL OR expires_at > NOW())
+            """
+            results = await self.execute_query(query, query_hash, agent_id)
         return results[0] if results else None
     
     async def update_semantic_cache_hit(self, cache_id: uuid.UUID):
@@ -76,21 +86,27 @@ class DatabaseService:
         response_metadata: Optional[Dict] = None,
         tokens_saved: int = 0,
         confidence_score: float = 0.9,
-        ttl_hours: int = 168
+        ttl_hours: int = 168,
+        agent_id: Optional[uuid.UUID] = None
     ) -> Dict[str, Any]:
-        """Create a new semantic cache entry."""
-        query_hash = hashlib.sha256(query_text.encode()).hexdigest()
+        """Create a new semantic cache entry with optional agent_id."""
+        # Include agent_id in query_hash to ensure uniqueness per agent
+        if agent_id:
+            query_hash = hashlib.sha256((query_text + str(agent_id)).encode()).hexdigest()
+        else:
+            query_hash = hashlib.sha256(query_text.encode()).hexdigest()
+
         expires_at = datetime.utcnow() + timedelta(hours=ttl_hours) if ttl_hours else None
-        
+
         query = """
             INSERT INTO semantic_cache (
                 query_text, query_hash, query_embedding, response_text,
                 response_metadata, model_used, tokens_saved, confidence_score,
-                expires_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                expires_at, agent_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
         """
-        
+
         result = await self.execute_insert(
             query,
             query_text,
@@ -101,21 +117,24 @@ class DatabaseService:
             model_used,
             tokens_saved,
             confidence_score,
-            expires_at
+            expires_at,
+            agent_id
         )
-        
+
         return dict(result) if result else None
     
     async def find_similar_semantic_cache(
-        self, 
-        query_embedding: List[float], 
+        self,
+        query_embedding: List[float],
         threshold: float = 0.85,
-        limit: int = 5
+        limit: int = 5,
+        agent_id: Optional[uuid.UUID] = None
     ) -> List[Dict[str, Any]]:
-        """Find similar cache entries using vector similarity."""
+        """Find similar cache entries using vector similarity, optionally filtered by agent."""
         # Note: This requires the pgvector extension. We're using real[] for now.
         # In a real implementation with pgvector, we'd use vector similarity operators.
         # For now, we'll return empty list - this is a placeholder.
+        # Future implementation should filter by agent_id if provided.
         return []
     
     # ===== Embedding Cache Operations =====

@@ -1,0 +1,164 @@
+# NEXUS - Aggressive Claude Code context management for DeepSeek 128k limit
+# Generated 2026-01-21 for optimal DeepSeek V3/V4 tool-calling reliability
+
+# ============================================
+# HEAVY BINARY & DATA FILES (CRITICAL FOR 128K)
+# ============================================
+
+# Container data directories (huge, change frequently)
+data/**
+logs/**
+backups/**
+
+# Database files and backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+*.backup
+
+# Large JSON/CSV data files (can blow context window)
+*.json
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+
+# Media files (heavy, not needed for code context)
+*.mp3
+*.wav
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.pdf
+*.zip
+*.tar
+*.gz
+*.7z
+
+# ============================================
+# BUILD ARTIFACTS & DEPENDENCIES
+# ============================================
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache/
+pip-log.txt
+
+# Node.js (if any frontend)
+node_modules/
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+pyenv/
+poetry.lock
+Pipfile.lock
+
+# ============================================
+# EDITOR & IDE FILES
+# ============================================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================
+# NEXUS-SPECIFIC IGNORES
+# ============================================
+
+# Claude session data
+.claude/
+
+# Home Assistant runtime (large database files)
+config/homeassistant/.storage/
+config/homeassistant/home-assistant_v2.db*
+config/homeassistant/home-assistant.log*
+
+# Syncthing data
+sync/**
+
+# Test outputs
+test_output/
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+docker-compose.yml.backup
+HANDOFF.md
+
+# ============================================
+# SECURITY: NEVER INCLUDE IN CONTEXT
+# ============================================
+
+# Secrets (already in .gitignore but double-protect)
+.env
+.env.*
+*.pem
+*.key
+*.crt
+credentials.json
+service-account.json
+
+# ============================================
+# OPTIONAL: LARGE DOCUMENTATION FILES
+# ============================================
+
+# Uncomment if you have large markdown/PDF documentation
+# docs/**/*.pdf
+# docs/**/*.epub
+# docs/**/*.chm
+
+# ============================================
+# DEEPSEEK-SPECIFIC OPTIMIZATIONS
+# ============================================
+
+# Model files (if using local models)
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Embedding cache files
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Vector database files
+chromadb/**

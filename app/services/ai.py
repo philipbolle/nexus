@@ -9,6 +9,7 @@ import time
 import logging
 import hashlib
 from typing import Optional
+from uuid import UUID
 from dataclasses import dataclass
 
 from ..config import settings
@@ -61,6 +62,8 @@ async def log_usage(
     success: bool,
     error_message: Optional[str] = None,
     query_hash: Optional[str] = None,
+    agent_id: Optional[UUID] = None,
+    session_id: Optional[UUID] = None,
 ) -> None:
     """Log API usage to database."""
     try:
@@ -68,17 +71,17 @@ async def log_usage(
             """
             INSERT INTO api_usage
             (provider, model, input_tokens, output_tokens, cost_usd,
-             latency_ms, success, error_message, query_hash)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             latency_ms, success, error_message, query_hash, agent_id, session_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             provider, model, input_tokens, output_tokens, cost_usd,
-            latency_ms, success, error_message, query_hash
+            latency_ms, success, error_message, query_hash, agent_id, session_id
         )
     except Exception as e:
         logger.error(f"Failed to log API usage: {e}")
 
 
-async def query_groq(message: str, model: str = "llama-3.3-70b-versatile") -> AIResponse:
+async def query_groq(message: str, model: str = "llama-3.3-70b-versatile", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
     """Query Groq API (free tier)."""
     if not settings.groq_api_key:
         raise ValueError("GROQ_API_KEY not configured")
@@ -120,6 +123,8 @@ async def query_groq(message: str, model: str = "llama-3.3-70b-versatile") -> AI
         latency_ms=latency_ms,
         success=True,
         query_hash=query_hash,
+        agent_id=agent_id,
+        session_id=session_id,
     )
 
     return AIResponse(
@@ -133,7 +138,7 @@ async def query_groq(message: str, model: str = "llama-3.3-70b-versatile") -> AI
     )
 
 
-async def query_deepseek(message: str, model: str = "deepseek-chat") -> AIResponse:
+async def query_deepseek(message: str, model: str = "deepseek-chat", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
     """Query DeepSeek API (cheap fallback)."""
     if not settings.deepseek_api_key:
         raise ValueError("DEEPSEEK_API_KEY not configured")
@@ -175,6 +180,8 @@ async def query_deepseek(message: str, model: str = "deepseek-chat") -> AIRespon
         latency_ms=latency_ms,
         success=True,
         query_hash=query_hash,
+        agent_id=agent_id,
+        session_id=session_id,
     )
 
     return AIResponse(
@@ -188,7 +195,7 @@ async def query_deepseek(message: str, model: str = "deepseek-chat") -> AIRespon
     )
 
 
-async def chat(message: str, preferred_model: Optional[str] = None) -> AIResponse:
+async def chat(message: str, preferred_model: Optional[str] = None, agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> AIResponse:
     """
     Route chat to cheapest capable model.
 
@@ -226,7 +233,7 @@ async def chat(message: str, preferred_model: Optional[str] = None) -> AIRespons
     if settings.groq_api_key:
         try:
             model = preferred_model if preferred_model and "llama" in preferred_model else "llama-3.3-70b-versatile"
-            response = await query_groq(message, model)
+            response = await query_groq(message, model, agent_id=agent_id, session_id=session_id)
         except Exception as e:
             logger.warning(f"Groq failed: {e}")
             errors.append(f"groq: {e}")
@@ -234,7 +241,7 @@ async def chat(message: str, preferred_model: Optional[str] = None) -> AIRespons
     # Fall back to DeepSeek
     if response is None and settings.deepseek_api_key:
         try:
-            response = await query_deepseek(message)
+            response = await query_deepseek(message, agent_id=agent_id, session_id=session_id)
         except Exception as e:
             logger.warning(f"DeepSeek failed: {e}")
             errors.append(f"deepseek: {e}")

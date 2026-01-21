@@ -101,7 +101,7 @@ async def test_all_services():
             messages = [
                 {"role": "user", "content": "What is the capital of France?"}
             ]
-            response = await model_router.process_request(messages, task_type="simple_query")
+            response = await model_router.process_request(messages, task_type="simple_query", agent_id=None)
             print(f"   ✓ Request processing:")
             print(f"     - Model used: {response['model_used']}")
             print(f"     - Cached: {response['cached']}")

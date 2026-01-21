@@ -10,6 +10,7 @@ import time
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
+from uuid import UUID
 from .config import config
 from .cache_service import cache_service
 from .cost_tracker import cost_tracker
@@ -405,6 +406,7 @@ class ModelRouter:
         self,
         messages: List[Dict[str, str]],
         task_type: str = "general",
+        agent_id: Optional[UUID] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -422,7 +424,7 @@ class ModelRouter:
         
         # Check cache first
         query_text = self._messages_to_text(messages)
-        cached_response = await self.cache_service.get_semantic_cache(query_text)
+        cached_response = await self.cache_service.get_semantic_cache(query_text, agent_id)
         
         if cached_response:
             # Cache hit
@@ -437,7 +439,8 @@ class ModelRouter:
                 cached_tokens=cached_response.get("tokens_saved", 0),
                 cache_hit=True,
                 latency_ms=latency_ms,
-                query_hash=cached_response.get("query_hash")
+                query_hash=cached_response.get("query_hash"),
+                agent_id=agent_id
             )
             
             return {
@@ -472,7 +475,8 @@ class ModelRouter:
             model_id=routing_decision.selected_model,
             input_tokens=actual_tokens["input"],
             output_tokens=actual_tokens["output"],
-            latency_ms=actual_latency
+            latency_ms=actual_latency,
+            agent_id=agent_id
         )
         
         # Cache the response
@@ -481,7 +485,8 @@ class ModelRouter:
             response_text=response_content,
             model_used=routing_decision.selected_model,
             tokens_saved=0,  # Would calculate based on typical response length
-            confidence_score=0.9
+            confidence_score=0.9,
+            agent_id=agent_id
         )
         
         return {
@@ -592,7 +597,7 @@ if __name__ == "__main__":
         messages = [
             {"role": "user", "content": "What is the capital of France?"}
         ]
-        response = await model_router.process_request(messages, task_type="simple_query")
+        response = await model_router.process_request(messages, task_type="simple_query", agent_id=None)
         print("\nRequest Response:", json.dumps(response, indent=2))
         
         await close_model_router()

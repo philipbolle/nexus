@@ -7,23 +7,29 @@
 - **Database:** PostgreSQL 16 + ChromaDB + Redis
 - **Containers:** Docker Compose (8 services)
 - **AI Providers:** Ollama → Groq → DeepSeek → Anthropic
+- **Agent Framework:** Multi-agent orchestration with hierarchical supervision
+- **Evolution System:** Performance analysis, bottleneck detection, A/B testing
 
 ## Architecture
-- Multi-agent orchestration with hierarchical supervision
+- Multi-agent orchestration framework with hierarchical supervision
+- Self-evolution system with performance analysis, bottleneck detection, and A/B testing
 - Privacy Shield intercepts all queries locally
 - Cost cascade routing: cheapest capable model first
 - Semantic caching for 60-70% cost reduction
 
 ## Database
-- 186 tables, UUID primary keys
+- 193 tables, UUID primary keys
 - Schema in `schema/`
 - Fix: `schema/01_NEXUS_SCHEMA_FIX.sql`
 
 ## Current Goals
-1. Apply schema fix
-2. Build cost optimization layer
-3. Create Finance Agent
-4. iPhone Quick Expense shortcut
+1. ✅ Apply schema fix (COMPLETED)
+2. ✅ Build cost optimization layer (COMPLETED)
+3. ✅ Implement Multi-Agent Orchestration Framework (COMPLETED)
+4. ✅ Implement Self-Evolution System (COMPLETED)
+5. Create Finance Agent
+6. iPhone Quick Expense shortcut
+7. Integrate agent framework with existing services
 
 ## Conventions
 - async/await for all I/O
@@ -31,9 +37,113 @@
 - Log all agent actions
 - ALL AI calls through cost router
 
+## Claude Code Instructions
+
+### Model Usage
+- **Primary Model**: Use only DeepSeek models (deepseek-chat) for all tasks
+- **Agent Configuration**: Custom agents (`general-purpose`, `architect`, `code-reviewer`) are pre-configured with `model: deepseek-chat`
+- **System Agents**: Use DeepSeek via inheritance from primary model
+
+### Automatic Agent Delegation (REQUIRED)
+**Always delegate to appropriate agents automatically without user prompting:**
+
+#### Core Development Agents
+1. **FastAPI/Python Development** → Use `fastapi-python` agent
+   - FastAPI endpoint development, async Python patterns
+   - Pydantic models, router implementation, service layer
+
+2. **PostgreSQL Database** → Use `postgresql-db` agent
+   - Database schema design, query optimization, migrations
+   - Asyncpg patterns, performance tuning, data modeling
+
+3. **AI/ML Integration** → Use `ai-ml-integration` agent
+   - Multi-provider AI routing, semantic caching, cost optimization
+   - Embeddings, model selection, prompt engineering
+
+4. **Email Intelligence** → Use `email-intelligence` agent
+   - IMAP integration, email classification, transaction extraction
+   - Sender preference learning, cross-life insights
+
+5. **Finance Tracking** → Use `finance-tracking` agent
+   - Expense tracking, budget management, debt payoff strategies
+   - Financial insights, spending pattern analysis
+
+6. **Docker & Containers** → Use `docker-container` agent
+   - Docker Compose configuration, container orchestration
+   - Systemd integration, volume management, security
+
+7. **Testing & QA** → Use `testing-qa` agent
+   - Test automation, API testing, integration testing
+   - Quality assurance, performance testing, security testing
+
+8. **n8n Automation** → Use `n8n-automation` agent
+   - Workflow design, webhook integration, node configuration
+   - Scheduled automation, error handling, optimization
+
+#### Specialized System Agents
+9. **Architecture/System Design** → Use `architect` agent
+   - System design decisions, technology selection, scalability planning
+
+10. **Code Review/Security Audit** → Use `code-reviewer` agent
+    - Code reviews, security audits, best practices verification
+
+11. **Codebase Exploration** → Use `Explore` agent
+    - Finding files, searching code, understanding structure
+
+12. **Implementation Planning** → Use `Plan` agent
+    - Complex feature planning, multi-step implementation design
+
+13. **Claude Code Questions** → Use `claude-code-guide` agent
+    - Claude Code features, usage questions, tool configuration
+
+14. **Simple Bash/System Tasks** → Use `Bash` agent
+    - Git operations, Docker commands, system administration
+
+#### General Purpose Fallback
+15. **General Development Tasks** → Use `general-purpose` agent
+    - When no specialized agent fits, general Nexus development
+    - Mixed tasks involving multiple specializations
+
+### Quality Standards
+- **Code Quality**: Follow Nexus conventions above; produce clean, maintainable code
+- **Testing**: Always test changes with `scripts/test_api.py` before committing
+- **Documentation**: Update relevant documentation (CLAUDE.md, .clauderc) if architecture changes
+
 ## DO NOT Modify
 - `.env` (secrets)
 - `data/` (container state)
+
+## DeepSeek Optimization Strategies
+
+### 1. Context Window Management (128k Limit)
+- **Aggressive .claudignore**: Heavy files excluded (data/, logs/, *.json, *.csv, media)
+- **Manual Truncation**: Use `/compact` when conversation grows too long
+- **Chunked Operations**: Break large tasks into smaller, focused agent calls
+
+### 2. Plan Mode for Cost Efficiency
+**Before complex implementations:**
+1. **Always start with**: "Read CLAUDE.md and enter Plan Mode"
+2. **Review**: DeepSeek outlines changes in single completion
+3. **Approve**: Say "Execute" to implement after review
+4. **Prevents looping**: Reduces API costs from trial-and-error
+
+### 3. MCP (Model Context Protocol) Power-Ups
+**Essential for DeepSeek's world knowledge gap - ✅ AUTOMATICALLY INSTALLED & CONFIGURED:**
+- **Sequential Thinking MCP**: Forces private reasoning before code ✅ Installed & configured
+- **Filesystem MCP**: Direct file access without guessing ✅ Installed & configured
+- **Fetch MCP**: HTTP request testing ✅ Installed & configured (Python virtual environment)
+- **Postgres MCP**: Connect to real database schemas (optional, not in official servers)
+- **Configuration**: Automatically configured in `~/.config/Claude/claude_desktop_config.json`
+
+### 4. Senior Engineer Mindset Prompt
+**System-level behavior override:**
+"You are a Senior Staff Engineer. Be skeptical of my requests. If my approach is inefficient, suggest a better architecture. Prioritize performance and type safety. Do not apologize for errors; just fix them."
+
+### 5. Automatic Agent Delegation Rules
+**Already configured in agents/ directory:**
+- 11 specialized agents pre-configured with DeepSeek
+- Automatic delegation based on task type
+- Each agent optimized for specific domain
 
 ## Philip's Context
 - Night shift janitor, 6PM-12AM

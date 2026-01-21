@@ -8,6 +8,7 @@ import json
 import hashlib
 import pickle
 from typing import Dict, List, Any, Optional, Tuple
+from uuid import UUID
 from datetime import datetime, timedelta
 import redis.asyncio as redis
 from .config import config
@@ -34,19 +35,25 @@ class CacheService:
         if self.redis_client:
             await self.redis_client.close()
             self.redis_client = None
-    
+
+    def _generate_query_hash(self, query_text: str, agent_id: Optional[UUID] = None) -> str:
+        """Generate query hash that includes agent_id for uniqueness."""
+        if agent_id:
+            return hashlib.sha256((query_text + str(agent_id)).encode()).hexdigest()
+        return hashlib.sha256(query_text.encode()).hexdigest()
+
     # ===== Semantic Cache Methods =====
     
-    async def get_semantic_cache(self, query_text: str) -> Optional[Dict[str, Any]]:
+    async def get_semantic_cache(self, query_text: str, agent_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """
-        Get cached response for a query.
+        Get cached response for a query, optionally scoped to an agent.
         First checks Redis, then falls back to PostgreSQL.
         """
-        query_hash = hashlib.sha256(query_text.encode()).hexdigest()
-        
+        query_hash = self._generate_query_hash(query_text, agent_id)
+
         # Try Redis first
         if self.redis_client:
-            redis_key = f"semantic:{query_hash}"
+            redis_key = f"semantic:{agent_id}:{query_hash}" if agent_id else f"semantic:{query_hash}"
             cached = await self.redis_client.get(redis_key)
             if cached:
                 try:
@@ -57,21 +64,21 @@ class CacheService:
                 except:
                     # Corrupted cache, delete it
                     await self.redis_client.delete(redis_key)
-        
+
         # Fall back to PostgreSQL
-        db_cache = await db_service.get_semantic_cache(query_hash)
+        db_cache = await db_service.get_semantic_cache(query_hash, agent_id)
         if db_cache:
             # Store in Redis for faster access
             if self.redis_client:
-                redis_key = f"semantic:{query_hash}"
+                redis_key = f"semantic:{agent_id}:{query_hash}" if agent_id else f"semantic:{query_hash}"
                 ttl = config.cost_optimization.cache_ttl_hours * 3600
                 await self.redis_client.setex(
-                    redis_key, 
-                    ttl, 
+                    redis_key,
+                    ttl,
                     pickle.dumps(db_cache)
                 )
             return db_cache
-        
+
         return None
     
     async def set_semantic_cache(
@@ -82,16 +89,17 @@ class CacheService:
         query_embedding: Optional[List[float]] = None,
         response_metadata: Optional[Dict] = None,
         tokens_saved: int = 0,
-        confidence_score: float = 0.9
+        confidence_score: float = 0.9,
+        agent_id: Optional[UUID] = None
     ) -> Dict[str, Any]:
-        """Set semantic cache in both Redis and PostgreSQL."""
+        """Set semantic cache in both Redis and PostgreSQL, optionally scoped to an agent."""
         # Calculate cost savings
         model_config = config.models.get(model_used)
         cost_saved_usd = 0.0
         if model_config:
             cost_per_token = model_config.input_cost_per_mtok / 1_000_000
             cost_saved_usd = tokens_saved * cost_per_token
-        
+
         # Store in PostgreSQL
         db_cache = await db_service.create_semantic_cache(
             query_text=query_text,
@@ -101,26 +109,27 @@ class CacheService:
             response_metadata=response_metadata,
             tokens_saved=tokens_saved,
             confidence_score=confidence_score,
-            ttl_hours=config.cost_optimization.cache_ttl_hours
+            ttl_hours=config.cost_optimization.cache_ttl_hours,
+            agent_id=agent_id
         )
-        
+
         if not db_cache:
             raise Exception("Failed to create semantic cache in database")
-        
+
         # Add cost savings to cache entry
         db_cache['cost_saved_usd'] = cost_saved_usd
-        
+
         # Store in Redis
         if self.redis_client:
-            query_hash = hashlib.sha256(query_text.encode()).hexdigest()
-            redis_key = f"semantic:{query_hash}"
+            query_hash = self._generate_query_hash(query_text, agent_id)
+            redis_key = f"semantic:{agent_id}:{query_hash}" if agent_id else f"semantic:{query_hash}"
             ttl = config.cost_optimization.cache_ttl_hours * 3600
             await self.redis_client.setex(
                 redis_key,
                 ttl,
                 pickle.dumps(db_cache)
             )
-        
+
         return db_cache
     
     async def _update_semantic_cache_hit(self, cache_id: str):
@@ -134,18 +143,24 @@ class CacheService:
         self,
         query_embedding: List[float],
         threshold: float = None,
-        limit: int = 5
+        limit: int = 5,
+        agent_id: Optional[UUID] = None
     ) -> List[Dict[str, Any]]:
         """
-        Find similar cache entries using vector similarity.
+        Find similar cache entries using vector similarity, optionally filtered by agent.
         Currently a placeholder until pgvector is installed.
         """
         if threshold is None:
             threshold = config.cost_optimization.semantic_similarity_threshold
-        
+
         # TODO: Implement vector similarity search with pgvector
-        # For now, return empty list
-        return []
+        # For now, delegate to database service (which also returns empty list)
+        return await db_service.find_similar_semantic_cache(
+            query_embedding=query_embedding,
+            threshold=threshold,
+            limit=limit,
+            agent_id=agent_id
+        )
     
     # ===== Embedding Cache Methods =====
     
@@ -272,22 +287,27 @@ class CacheService:
     
     # ===== Batch Cache Operations =====
     
-    async def batch_get_semantic_cache(self, query_texts: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
-        """Batch get semantic cache for multiple queries."""
+    async def batch_get_semantic_cache(self, query_texts: List[str], agent_id: Optional[UUID] = None) -> Dict[str, Optional[Dict[str, Any]]]:
+        """Batch get semantic cache for multiple queries, optionally scoped to an agent."""
         results = {}
         for query_text in query_texts:
-            results[query_text] = await self.get_semantic_cache(query_text)
+            results[query_text] = await self.get_semantic_cache(query_text, agent_id)
         return results
     
     async def batch_set_semantic_cache(
         self,
-        cache_entries: List[Dict[str, Any]]
+        cache_entries: List[Dict[str, Any]],
+        agent_id: Optional[UUID] = None
     ) -> List[Dict[str, Any]]:
-        """Batch set semantic cache entries."""
+        """Batch set semantic cache entries, optionally scoped to an agent."""
         results = []
         for entry in cache_entries:
             try:
-                result = await self.set_semantic_cache(**entry)
+                # If agent_id parameter provided and entry doesn't have agent_id, add it
+                entry_copy = entry.copy()
+                if agent_id is not None and 'agent_id' not in entry_copy:
+                    entry_copy['agent_id'] = agent_id
+                result = await self.set_semantic_cache(**entry_copy)
                 results.append(result)
             except Exception as e:
                 results.append({"error": str(e), "entry": entry})

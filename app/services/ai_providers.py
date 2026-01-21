@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any, List
 from datetime import date
 from dataclasses import dataclass
 from enum import Enum
+from uuid import UUID
 
 from ..config import settings
 from ..database import db
@@ -135,7 +136,7 @@ async def select_provider(task_type: str) -> Optional[str]:
     return None
 
 
-async def call_groq(prompt: str, system: str = "") -> Dict[str, Any]:
+async def call_groq(prompt: str, system: str = "", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> Dict[str, Any]:
     """Call Groq API."""
     api_key = settings.groq_api_key
     if not api_key:
@@ -171,7 +172,7 @@ async def call_groq(prompt: str, system: str = "") -> Dict[str, Any]:
     return {"content": content, "tokens": tokens, "provider": "groq"}
 
 
-async def call_google(prompt: str, system: str = "") -> Dict[str, Any]:
+async def call_google(prompt: str, system: str = "", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> Dict[str, Any]:
     """Call Google Gemini API."""
     api_key = settings.google_ai_api_key
     if not api_key:
@@ -202,7 +203,7 @@ async def call_google(prompt: str, system: str = "") -> Dict[str, Any]:
     return {"content": content, "tokens": tokens, "provider": "google"}
 
 
-async def call_openrouter(prompt: str, system: str = "") -> Dict[str, Any]:
+async def call_openrouter(prompt: str, system: str = "", agent_id: Optional[UUID] = None, session_id: Optional[UUID] = None) -> Dict[str, Any]:
     """Call OpenRouter API."""
     api_key = settings.openrouter_api_key
     if not api_key:
@@ -242,7 +243,9 @@ async def ai_request(
     prompt: str,
     task_type: str = "quick",
     system: str = "",
-    preferred_provider: Optional[str] = None
+    preferred_provider: Optional[str] = None,
+    agent_id: Optional[UUID] = None,
+    session_id: Optional[UUID] = None
 ) -> Dict[str, Any]:
     """
     Make an AI request, automatically selecting the best provider.
@@ -252,6 +255,8 @@ async def ai_request(
         task_type: Type of task (classification, extraction, etc.)
         system: Optional system prompt
         preferred_provider: Force a specific provider
+        agent_id: Optional agent ID for usage attribution
+        session_id: Optional session ID for usage attribution
 
     Returns:
         Dict with content, tokens, and provider used
@@ -267,11 +272,11 @@ async def ai_request(
     # Call the appropriate provider
     try:
         if provider == "groq":
-            return await call_groq(prompt, system)
+            return await call_groq(prompt, system, agent_id=agent_id, session_id=session_id)
         elif provider == "google":
-            return await call_google(prompt, system)
+            return await call_google(prompt, system, agent_id=agent_id, session_id=session_id)
         elif provider == "openrouter":
-            return await call_openrouter(prompt, system)
+            return await call_openrouter(prompt, system, agent_id=agent_id, session_id=session_id)
         else:
             raise ValueError(f"Unknown provider: {provider}")
     except Exception as e:
@@ -282,11 +287,11 @@ async def ai_request(
                 try:
                     logger.info(f"Falling back to {fallback}")
                     if fallback == "groq":
-                        return await call_groq(prompt, system)
+                        return await call_groq(prompt, system, agent_id=agent_id, session_id=session_id)
                     elif fallback == "google":
-                        return await call_google(prompt, system)
+                        return await call_google(prompt, system, agent_id=agent_id, session_id=session_id)
                     elif fallback == "openrouter":
-                        return await call_openrouter(prompt, system)
+                        return await call_openrouter(prompt, system, agent_id=agent_id, session_id=session_id)
                 except Exception as e2:
                     logger.error(f"Fallback {fallback} also failed: {e2}")
                     continue

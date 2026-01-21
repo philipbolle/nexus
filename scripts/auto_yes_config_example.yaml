@@ -1,0 +1,28 @@
+# Auto-Yes Configuration Example
+# Save as auto_yes_config.yaml and use with --patterns-file
+
+patterns:
+  - regex: '\(y/N\)'
+    response: 'y\n'
+    description: "Answer 'y' to (y/N) prompts"
+
+  - regex: '\(Y/n\)'
+    response: 'y\n'
+    description: "Answer 'y' to (Y/n) prompts"
+
+  - regex: 'confirm\?'
+    response: 'yes\n'
+    description: "Answer 'yes' to confirm?"
+
+  - regex: 'press Enter to skip'
+    response: '\n'
+    description: "Press Enter for skip prompts"
+
+  - regex: 'Are you sure\?'
+    response: 'yes\n'
+    description: "Answer 'yes' to 'Are you sure?'"
+
+  # Add custom patterns for Claude Code prompts here
+  # - regex: 'Claude Code.*continue\?'
+  #   response: 'y\n'
+  #   description: "Answer 'y' to Claude Code continue prompts"

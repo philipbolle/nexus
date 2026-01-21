@@ -10,7 +10,7 @@ import logging
 
 from .config import settings
 from .database import db
-from .routers import health, chat, finance, email
+from .routers import health, chat, finance, email, agents, evolution
 
 # Configure logging
 logging.basicConfig(
@@ -27,6 +27,15 @@ async def lifespan(app: FastAPI):
     logger.info("Starting NEXUS API...")
     await db.connect()
     logger.info(f"Database connected: {settings.postgres_host}:{settings.postgres_port}")
+
+    # Initialize agent framework components
+    try:
+        await agents.initialize_agent_framework()
+        logger.info("Agent framework initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize agent framework: {e}")
+        # Continue without agent framework - endpoints may fail
+
     logger.info(f"API running on port {settings.api_port}")
 
     yield
@@ -59,6 +68,8 @@ app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(finance.router)
 app.include_router(email.router)
+app.include_router(agents.router)
+app.include_router(evolution.router)
 
 
 @app.get("/")
