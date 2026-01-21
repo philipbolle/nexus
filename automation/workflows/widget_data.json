@@ -1,0 +1,115 @@
+{
+  "name": "Widget_Data_Endpoint",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "widget-data",
+        "httpMethod": "GET",
+        "options": {}
+      },
+      "id": "webhook-widget",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "widget-data-webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "32.79907"
+            },
+            {
+              "name": "longitude",
+              "value": "-96.69025"
+            },
+            {
+              "name": "current",
+              "value": "temperature_2m"
+            },
+            {
+              "name": "temperature_unit",
+              "value": "fahrenheit"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-weather-widget",
+      "name": "Get_Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const weather = $input.first().json;\nconst temp = Math.round(weather.current?.temperature_2m || 72);\n\nconst now = new Date();\nconst hour = now.getHours();\nlet greeting = 'Good morning';\nif (hour >= 12 && hour < 18) greeting = 'Good afternoon';\nif (hour >= 18) greeting = 'Good evening';\n\nreturn {\n  json: {\n    greeting: greeting,\n    weather: `${temp}°F`,\n    task: 'Check your priorities',\n    aiStatus: 'Online',\n    date: now.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'}),\n    time: now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}),\n    updated: now.toISOString()\n  }\n};"
+      },
+      "id": "compile-widget-data",
+      "name": "Compile_Widget_Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-widget",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get_Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_Weather": {
+      "main": [
+        [
+          {
+            "node": "Compile_Widget_Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compile_Widget_Data": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "1"
+}

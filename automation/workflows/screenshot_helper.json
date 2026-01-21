@@ -1,0 +1,88 @@
+{
+  "name": "Screenshot_Helper_Gemini",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "screenshot-helper",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-screenshot",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "screenshot-helper-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={{ $env.GOOGLE_AI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"systemInstruction\": {\n    \"parts\": [\n      {\n        \"text\": \"You are a helpful assistant that analyzes screenshots. When shown a screenshot, you should: 1) Identify what app or website is shown, 2) Describe any errors, warnings, or issues visible, 3) Suggest solutions or next steps if problems are detected, 4) Extract any relevant text or data. Be concise but thorough.\"\n      }\n    ]\n  },\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify($json.body.prompt || \"Please analyze this screenshot and help me understand what I'm looking at. If there are any errors or issues, explain what they mean and how to fix them.\") }}\n        },\n        {\n          \"inline_data\": {\n            \"mime_type\": {{ JSON.stringify($json.body.mime_type || \"image/png\") }},\n            \"data\": {{ JSON.stringify($json.body.image) }}\n          }\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.3,\n    \"maxOutputTokens\": 1500\n  }\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "gemini-vision",
+      "name": "Call Gemini Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"analysis\": {{ JSON.stringify($json.candidates[0].content.parts[0].text) }},\n  \"model\": \"gemini-2.5-flash\",\n  \"finish_reason\": {{ JSON.stringify($json.candidates[0].finishReason) }}\n}",
+        "options": {}
+      },
+      "id": "respond-screenshot",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Call Gemini Vision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini Vision": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}

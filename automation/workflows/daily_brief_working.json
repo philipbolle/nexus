@@ -1,0 +1,74 @@
+{
+  "name": "Daily_Brief_Working",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "daily-brief",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-db",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "daily-brief-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant that provides brief daily summaries. Be concise and friendly.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Give me a brief morning greeting and 3 productivity tips for today. Keep it under 100 words total.\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 200\n}",
+        "options": {}
+      },
+      "id": "groq-db",
+      "name": "Get Daily Brief",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"brief\": {{ JSON.stringify($json.choices[0].message.content) }},\n  \"generated_at\": {{ JSON.stringify(new Date().toISOString()) }},\n  \"model\": {{ JSON.stringify($json.model) }}\n}",
+        "options": {}
+      },
+      "id": "respond-db",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Get Daily Brief", "type": "main", "index": 0}]]
+    },
+    "Get Daily Brief": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}

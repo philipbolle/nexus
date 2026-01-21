@@ -1,0 +1,133 @@
+{
+  "name": "AI_Router_Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-router",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-start",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "ai-router-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const requestData = $input.first().json;\nconst query = requestData.query || 'Hello';\n\nreturn {\n  json: {\n    model: 'llama-3.3-70b-versatile',\n    messages: [\n      {\n        role: 'user',\n        content: query\n      }\n    ],\n    temperature: 0.7,\n    max_tokens: 1024\n  }\n};"
+      },
+      "id": "prepare-request",
+      "name": "Prepare_Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "groq-request",
+      "name": "Ask_Groq_AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nlet answer = '';\n\nif (response.choices && response.choices[0]) {\n  answer = response.choices[0].message.content;\n} else if (response.error) {\n  answer = 'Error: ' + response.error.message;\n} else {\n  answer = 'No response received';\n}\n\nreturn {\n  json: {\n    response: answer,\n    model: 'groq-llama-3.3-70b',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "format-response",
+      "name": "Format_Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-response",
+      "name": "Respond_To_Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Request": {
+      "main": [
+        [
+          {
+            "node": "Ask_Groq_AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask_Groq_AI": {
+      "main": [
+        [
+          {
+            "node": "Format_Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_Response": {
+      "main": [
+        [
+          {
+            "node": "Respond_To_Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "1"
+}

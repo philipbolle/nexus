@@ -1,0 +1,133 @@
+{
+  "name": "Quick_Capture",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quick-capture",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-capture",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "quick-capture-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst text = data.text || '';\n\nreturn {\n  json: {\n    model: 'llama-3.2-3b-preview',\n    messages: [\n      {\n        role: 'user',\n        content: 'Categorize this as ONE word only: task, idea, expense, reminder, or note. Text: ' + text + '\\n\\nRespond with ONLY the category word.'\n      }\n    ],\n    temperature: 0,\n    max_tokens: 10\n  }\n};"
+      },
+      "id": "prepare-categorize",
+      "name": "Prepare_Categorization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "categorize-ai",
+      "name": "Categorize_With_AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst originalData = $('Webhook').first().json;\n\nlet category = 'note';\nif (response.choices && response.choices[0]) {\n  category = response.choices[0].message.content.toLowerCase().trim();\n}\n\nconst timestamp = new Date();\nconst formatted = `${timestamp.toLocaleString('en-US', {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'})} | #${category}\\n${originalData.text}\\n---\\n`;\n\nreturn {\n  json: {\n    text: originalData.text,\n    category: category,\n    formatted: formatted,\n    timestamp: timestamp.toISOString(),\n    source: originalData.source || 'unknown'\n  }\n};"
+      },
+      "id": "parse-category",
+      "name": "Parse_Category",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-capture",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare_Categorization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Categorization": {
+      "main": [
+        [
+          {
+            "node": "Categorize_With_AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize_With_AI": {
+      "main": [
+        [
+          {
+            "node": "Parse_Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse_Category": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "1"
+}

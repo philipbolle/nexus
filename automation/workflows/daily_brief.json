@@ -1,0 +1,123 @@
+{
+  "name": "Daily_Brief",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "daily-brief",
+        "httpMethod": "GET",
+        "options": {}
+      },
+      "id": "webhook-brief",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "daily-brief-webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "32.79907"
+            },
+            {
+              "name": "longitude",
+              "value": "-96.69025"
+            },
+            {
+              "name": "current",
+              "value": "temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m"
+            },
+            {
+              "name": "daily",
+              "value": "temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+            },
+            {
+              "name": "temperature_unit",
+              "value": "fahrenheit"
+            },
+            {
+              "name": "timezone",
+              "value": "America/Chicago"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-weather",
+      "name": "Get_Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const weather = $input.first().json;\nconst current = weather.current;\nconst daily = weather.daily;\n\nconst now = new Date();\nconst hour = now.getHours();\nlet greeting = 'Good morning';\nif (hour >= 12 && hour < 18) greeting = 'Good afternoon';\nif (hour >= 18) greeting = 'Good evening';\n\nconst weatherCodes = {\n  0: 'Clear', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',\n  45: 'Foggy', 51: 'Light drizzle', 61: 'Light rain', 63: 'Rain', 80: 'Rain showers', 95: 'Thunderstorm'\n};\n\nconst weatherDesc = weatherCodes[current.weather_code] || 'Weather';\nconst temp = Math.round(current.temperature_2m);\nconst high = Math.round(daily.temperature_2m_max[0]);\nconst low = Math.round(daily.temperature_2m_min[0]);\n\nconst briefText = `${greeting}, Philip! It's ${weatherDesc.toLowerCase()} and ${temp}°F in Garland. Today's high: ${high}°F, low: ${low}°F. Make it a great day!`;\n\nreturn {\n  json: {\n    brief: briefText,\n    weather: {\n      temp: temp,\n      description: weatherDesc,\n      high: high,\n      low: low,\n      humidity: current.relative_humidity_2m,\n      wind: Math.round(current.wind_speed_10m)\n    },\n    greeting: greeting,\n    generated_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "format-brief",
+      "name": "Format_Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-brief",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get_Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get_Weather": {
+      "main": [
+        [
+          {
+            "node": "Format_Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_Brief": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-19T00:00:00.000Z",
+  "versionId": "1"
+}

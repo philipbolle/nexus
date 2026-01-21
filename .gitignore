@@ -43,7 +43,8 @@ Thumbs.db
 *.wav
 HANDOFF.md
 test_output/
+.claude/
 
-
-config/homeassistant/.storage/auth
-config/homeassistant/.storage/*
+# Home Assistant runtime files
+config/homeassistant/home-assistant_v2.db*
+config/homeassistant/.storage/

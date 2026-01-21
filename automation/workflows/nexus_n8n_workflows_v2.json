@@ -1,0 +1,582 @@
+{
+  "meta": {
+    "name": "NEXUS Complete Workflow Pack",
+    "version": "2.0",
+    "created": "2025-01-19"
+  },
+  "workflows": [
+    {
+      "name": "01_AI_Router_Ultimate",
+      "active": true,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "ai-router",
+            "httpMethod": "POST",
+            "responseMode": "responseNode",
+            "options": {}
+          },
+          "id": "webhook-1",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [250, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const query = $input.first().json.query?.toLowerCase() || '';\nconst hasImage = !!$input.first().json.image;\n\nlet queryType = 'general';\nlet priority = 'normal';\n\nif (hasImage) {\n  queryType = 'vision';\n  priority = 'high';\n} else if (/code|python|javascript|function|debug|error|fix|program/.test(query)) {\n  queryType = 'code';\n} else if (/search|find|latest|news|current|today|recent/.test(query)) {\n  queryType = 'research';\n} else if (/analyze|compare|think|explain|why|how does|complex/.test(query) || query.length > 500) {\n  queryType = 'complex';\n  priority = 'high';\n} else if (query.length < 100) {\n  queryType = 'quick';\n  priority = 'low';\n}\n\nreturn {\n  json: {\n    ...$input.first().json,\n    queryType,\n    priority,\n    timestamp: new Date().toISOString()\n  }\n};"
+          },
+          "id": "classify-1",
+          "name": "Classify_Query",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [450, 300]
+        },
+        {
+          "parameters": {
+            "mode": "rules",
+            "rules": {
+              "rules": [
+                {"value1": "={{$json.queryType}}", "operation": "equals", "value2": "vision", "output": 0},
+                {"value1": "={{$json.queryType}}", "operation": "equals", "value2": "code", "output": 1},
+                {"value1": "={{$json.queryType}}", "operation": "equals", "value2": "research", "output": 2},
+                {"value1": "={{$json.queryType}}", "operation": "equals", "value2": "complex", "output": 3}
+              ]
+            },
+            "fallbackOutput": 4
+          },
+          "id": "switch-1",
+          "name": "Route_By_Type",
+          "type": "n8n-nodes-base.switch",
+          "typeVersion": 3,
+          "position": [650, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent",
+            "method": "POST",
+            "sendQuery": true,
+            "queryParameters": {
+              "parameters": [
+                {"name": "key", "value": "={{ $env.GEMINI_API_KEY }}"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      {\"text\": \"{{ $json.query }}\"},\n      {\"inline_data\": {\"mime_type\": \"image/jpeg\", \"data\": \"{{ $json.image }}\"}}\n    ]\n  }]\n}"
+          },
+          "id": "vision-1",
+          "name": "Vision_Gemini",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [900, 100]
+        },
+        {
+          "parameters": {
+            "url": "https://api.groq.com/openai/v1/chat/completions",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Authorization", "value": "=Bearer {{ $env.GROQ_API_KEY }}"},
+                {"name": "Content-Type", "value": "application/json"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [{\"role\": \"system\", \"content\": \"You are a helpful coding assistant. Be concise and provide working code.\"}, {\"role\": \"user\", \"content\": \"{{ $json.query }}\"}],\n  \"temperature\": 0.3,\n  \"max_tokens\": 4096\n}"
+          },
+          "id": "code-1",
+          "name": "Code_Groq",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [900, 220]
+        },
+        {
+          "parameters": {
+            "url": "https://openrouter.ai/api/v1/chat/completions",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Authorization", "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"},
+                {"name": "Content-Type", "value": "application/json"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"perplexity/llama-3.1-sonar-small-128k-online\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"{{ $json.query }}\"}]\n}"
+          },
+          "id": "research-1",
+          "name": "Research_Perplexity",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [900, 340]
+        },
+        {
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent",
+            "method": "POST",
+            "sendQuery": true,
+            "queryParameters": {
+              "parameters": [
+                {"name": "key", "value": "={{ $env.GEMINI_API_KEY }}"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"contents\": [{\"parts\": [{\"text\": \"{{ $json.query }}\"}]}]\n}"
+          },
+          "id": "complex-1",
+          "name": "Complex_Gemini_Thinking",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [900, 460]
+        },
+        {
+          "parameters": {
+            "url": "https://api.groq.com/openai/v1/chat/completions",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Authorization", "value": "=Bearer {{ $env.GROQ_API_KEY }}"},
+                {"name": "Content-Type", "value": "application/json"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llama-3.2-3b-preview\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"{{ $json.query }}\"}],\n  \"temperature\": 0.7,\n  \"max_tokens\": 1024\n}"
+          },
+          "id": "quick-1",
+          "name": "Quick_Groq_Fast",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [900, 580]
+        },
+        {
+          "parameters": {
+            "jsCode": "let response = '';\nlet model = 'unknown';\nlet tokens = 0;\n\nconst data = $input.first().json;\n\nif (data.choices?.[0]) {\n  response = data.choices[0].message?.content || data.choices[0].text || '';\n  model = data.model || 'openai-format';\n  tokens = data.usage?.total_tokens || 0;\n} else if (data.candidates?.[0]) {\n  response = data.candidates[0].content?.parts?.[0]?.text || '';\n  model = 'gemini';\n  tokens = data.usageMetadata?.totalTokenCount || 0;\n} else if (data.error) {\n  response = `Error: ${data.error.message || JSON.stringify(data.error)}`;\n  model = 'error';\n}\n\nreturn {\n  json: {\n    response: response.trim(),\n    model,\n    tokens,\n    timestamp: new Date().toISOString()\n  }\n};"
+          },
+          "id": "format-1",
+          "name": "Format_Response",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1150, 300]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ $json }}"
+          },
+          "id": "respond-1",
+          "name": "Respond",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [1350, 300]
+        }
+      ],
+      "connections": {
+        "Webhook": {"main": [[{"node": "Classify_Query", "type": "main", "index": 0}]]},
+        "Classify_Query": {"main": [[{"node": "Route_By_Type", "type": "main", "index": 0}]]},
+        "Route_By_Type": {
+          "main": [
+            [{"node": "Vision_Gemini", "type": "main", "index": 0}],
+            [{"node": "Code_Groq", "type": "main", "index": 0}],
+            [{"node": "Research_Perplexity", "type": "main", "index": 0}],
+            [{"node": "Complex_Gemini_Thinking", "type": "main", "index": 0}],
+            [{"node": "Quick_Groq_Fast", "type": "main", "index": 0}]
+          ]
+        },
+        "Vision_Gemini": {"main": [[{"node": "Format_Response", "type": "main", "index": 0}]]},
+        "Code_Groq": {"main": [[{"node": "Format_Response", "type": "main", "index": 0}]]},
+        "Research_Perplexity": {"main": [[{"node": "Format_Response", "type": "main", "index": 0}]]},
+        "Complex_Gemini_Thinking": {"main": [[{"node": "Format_Response", "type": "main", "index": 0}]]},
+        "Quick_Groq_Fast": {"main": [[{"node": "Format_Response", "type": "main", "index": 0}]]},
+        "Format_Response": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+      }
+    },
+    {
+      "name": "02_Quick_Capture",
+      "active": true,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "quick-capture",
+            "httpMethod": "POST",
+            "responseMode": "responseNode"
+          },
+          "id": "wh-qc",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [250, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://api.groq.com/openai/v1/chat/completions",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Authorization", "value": "=Bearer {{ $env.GROQ_API_KEY }}"},
+                {"name": "Content-Type", "value": "application/json"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llama-3.2-3b-preview\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Categorize this as ONE word only: task, idea, expense, reminder, or note. Text: {{ $json.text }}\\n\\nRespond with ONLY the category word.\"}],\n  \"temperature\": 0,\n  \"max_tokens\": 10\n}"
+          },
+          "id": "cat-1",
+          "name": "Categorize_AI",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [450, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const response = $input.first().json;\nconst category = (response.choices?.[0]?.message?.content || 'note').toLowerCase().trim();\nconst originalData = $('Webhook').first().json;\n\nconst timestamp = new Date().toISOString();\nconst formatted = `${new Date().toLocaleString('en-US', {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'})} | #${category}\\n${originalData.text}\\n---\\n`;\n\nreturn {\n  json: {\n    text: originalData.text,\n    category,\n    formatted,\n    timestamp,\n    source: originalData.source || 'unknown'\n  }\n};"
+          },
+          "id": "parse-1",
+          "name": "Parse_Category",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [650, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://ntfy.sh/nexus-captures",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Title", "value": "=✅ Captured: {{ $json.category }}"},
+                {"name": "Tags", "value": "={{ $json.category }}"},
+                {"name": "Priority", "value": "default"}
+              ]
+            },
+            "sendBody": true,
+            "body": "={{ $json.text.substring(0, 100) }}"
+          },
+          "id": "notify-1",
+          "name": "Send_Notification",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [850, 400]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={\n  \"status\": \"captured\",\n  \"type\": \"{{ $json.category }}\",\n  \"text\": \"{{ $json.text }}\",\n  \"timestamp\": \"{{ $json.timestamp }}\"\n}"
+          },
+          "id": "resp-qc",
+          "name": "Respond",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [1050, 300]
+        }
+      ],
+      "connections": {
+        "Webhook": {"main": [[{"node": "Categorize_AI", "type": "main", "index": 0}]]},
+        "Categorize_AI": {"main": [[{"node": "Parse_Category", "type": "main", "index": 0}]]},
+        "Parse_Category": {"main": [[{"node": "Send_Notification", "type": "main", "index": 0}, {"node": "Respond", "type": "main", "index": 0}]]}
+      }
+    },
+    {
+      "name": "03_Daily_Brief",
+      "active": true,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "daily-brief",
+            "httpMethod": "GET",
+            "responseMode": "responseNode"
+          },
+          "id": "wh-db",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [250, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://api.open-meteo.com/v1/forecast",
+            "method": "GET",
+            "sendQuery": true,
+            "queryParameters": {
+              "parameters": [
+                {"name": "latitude", "value": "32.79907"},
+                {"name": "longitude", "value": "-96.69025"},
+                {"name": "current", "value": "temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m"},
+                {"name": "daily", "value": "temperature_2m_max,temperature_2m_min,precipitation_probability_max"},
+                {"name": "temperature_unit", "value": "fahrenheit"},
+                {"name": "timezone", "value": "America/Chicago"}
+              ]
+            }
+          },
+          "id": "weather-1",
+          "name": "Get_Weather",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [450, 200]
+        },
+        {
+          "parameters": {
+            "jsCode": "const weather = $input.first().json;\nconst current = weather.current;\nconst daily = weather.daily;\n\nconst now = new Date();\nconst dayOfWeek = now.toLocaleDateString('en-US', {weekday: 'long'});\nconst dateStr = now.toLocaleDateString('en-US', {month: 'long', day: 'numeric'});\nconst hour = now.getHours();\n\nlet greeting = 'Good morning';\nif (hour >= 12 && hour < 18) greeting = 'Good afternoon';\nif (hour >= 18) greeting = 'Good evening';\n\nconst weatherCodes = {\n  0: '☀️ Clear', 1: '🌤️ Mainly clear', 2: '⛅ Partly cloudy', 3: '☁️ Overcast',\n  45: '🌫️ Foggy', 48: '🌫️ Icy fog', 51: '🌧️ Light drizzle', 53: '🌧️ Drizzle',\n  61: '🌧️ Light rain', 63: '🌧️ Rain', 65: '🌧️ Heavy rain',\n  80: '🌦️ Rain showers', 95: '⛈️ Thunderstorm'\n};\n\nconst weatherDesc = weatherCodes[current.weather_code] || '🌡️ Weather';\n\nreturn {\n  json: {\n    greeting,\n    dayOfWeek,\n    dateStr,\n    weather: {\n      temp: Math.round(current.temperature_2m),\n      description: weatherDesc,\n      humidity: current.relative_humidity_2m,\n      wind: Math.round(current.wind_speed_10m),\n      high: Math.round(daily.temperature_2m_max[0]),\n      low: Math.round(daily.temperature_2m_min[0]),\n      rainChance: daily.precipitation_probability_max[0]\n    }\n  }\n};"
+          },
+          "id": "parse-weather",
+          "name": "Parse_Weather",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [650, 200]
+        },
+        {
+          "parameters": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent",
+            "method": "POST",
+            "sendQuery": true,
+            "queryParameters": {
+              "parameters": [{"name": "key", "value": "={{ $env.GEMINI_API_KEY }}"}]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Create a motivating 30-second morning briefing for Philip in Garland, TX. Be concise, energetic, and helpful.\\n\\nToday: {{ $json.dayOfWeek }}, {{ $json.dateStr }}\\nWeather: {{ $json.weather.description }} {{ $json.weather.temp }}°F (High: {{ $json.weather.high }}°, Low: {{ $json.weather.low }}°)\\nRain chance: {{ $json.weather.rainChance }}%\\nHumidity: {{ $json.weather.humidity }}%\\n\\nInclude:\\n1. {{ $json.greeting }} + weather summary\\n2. One actionable suggestion based on weather\\n3. A motivating thought for the day\\n\\nKeep it under 100 words. No emojis in text.\"\n    }]\n  }]\n}"
+          },
+          "id": "gen-brief",
+          "name": "Generate_Brief",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [850, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const geminiResp = $input.first().json;\nconst brief = geminiResp.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate brief';\nconst weatherData = $('Parse_Weather').first().json;\n\nreturn {\n  json: {\n    brief: brief.trim(),\n    weather: weatherData.weather,\n    generated_at: new Date().toISOString()\n  }\n};"
+          },
+          "id": "final-brief",
+          "name": "Format_Brief",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1050, 300]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ $json }}"
+          },
+          "id": "resp-db",
+          "name": "Respond",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [1250, 300]
+        }
+      ],
+      "connections": {
+        "Webhook": {"main": [[{"node": "Get_Weather", "type": "main", "index": 0}]]},
+        "Get_Weather": {"main": [[{"node": "Parse_Weather", "type": "main", "index": 0}]]},
+        "Parse_Weather": {"main": [[{"node": "Generate_Brief", "type": "main", "index": 0}]]},
+        "Generate_Brief": {"main": [[{"node": "Format_Brief", "type": "main", "index": 0}]]},
+        "Format_Brief": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+      }
+    },
+    {
+      "name": "04_Screenshot_Helper",
+      "active": true,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "screenshot-help",
+            "httpMethod": "POST",
+            "responseMode": "responseNode"
+          },
+          "id": "wh-ss",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [250, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://api.groq.com/openai/v1/chat/completions",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Authorization", "value": "=Bearer {{ $env.GROQ_API_KEY }}"},
+                {"name": "Content-Type", "value": "application/json"}
+              ]
+            },
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\n  \"model\": \"llama-3.2-90b-vision-preview\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\"type\": \"text\", \"text\": \"{{ $json.question || 'Describe what you see in this screenshot and provide helpful suggestions.' }}\"},\n        {\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/png;base64,{{ $json.image }}\"}}\n      ]\n    }\n  ],\n  \"max_tokens\": 1024,\n  \"temperature\": 0.3\n}"
+          },
+          "id": "analyze-ss",
+          "name": "Analyze_Screenshot",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [450, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const response = $input.first().json;\nconst answer = response.choices?.[0]?.message?.content || 'Unable to analyze screenshot';\n\nreturn {\n  json: {\n    answer: answer.trim(),\n    tokens_used: response.usage?.total_tokens || 0,\n    analyzed_at: new Date().toISOString()\n  }\n};"
+          },
+          "id": "format-ss",
+          "name": "Format_Response",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [650, 300]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ $json }}"
+          },
+          "id": "resp-ss",
+          "name": "Respond",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [850, 300]
+        }
+      ],
+      "connections": {
+        "Webhook": {"main": [[{"node": "Analyze_Screenshot", "type": "main", "index": 0}]]},
+        "Analyze_Screenshot": {"main": [[{"node": "Format_Response", "type": "main", "index": 0}]]},
+        "Format_Response": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+      }
+    },
+    {
+      "name": "05_Widget_Data_Endpoint",
+      "active": true,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "widget-data",
+            "httpMethod": "GET",
+            "responseMode": "responseNode"
+          },
+          "id": "wh-wd",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [250, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://api.open-meteo.com/v1/forecast",
+            "method": "GET",
+            "sendQuery": true,
+            "queryParameters": {
+              "parameters": [
+                {"name": "latitude", "value": "32.79907"},
+                {"name": "longitude", "value": "-96.69025"},
+                {"name": "current", "value": "temperature_2m"},
+                {"name": "temperature_unit", "value": "fahrenheit"}
+              ]
+            }
+          },
+          "id": "get-wx",
+          "name": "Get_Weather",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [450, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const weather = $input.first().json;\nconst temp = Math.round(weather.current?.temperature_2m || 0);\n\nconst now = new Date();\nconst hour = now.getHours();\nlet greeting = 'Good morning';\nif (hour >= 12 && hour < 18) greeting = 'Good afternoon';\nif (hour >= 18) greeting = 'Good evening';\n\nreturn {\n  json: {\n    greeting,\n    weather: `${temp}°F`,\n    task: 'Check your daily priorities',\n    aiStatus: 'Online',\n    steps: 0,\n    calories: 0,\n    sleep: 0,\n    water: 0,\n    date: now.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'}),\n    time: now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}),\n    updated: now.toISOString()\n  }\n};"
+          },
+          "id": "compile-data",
+          "name": "Compile_Widget_Data",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [650, 300]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ $json }}"
+          },
+          "id": "resp-wd",
+          "name": "Respond",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [850, 300]
+        }
+      ],
+      "connections": {
+        "Webhook": {"main": [[{"node": "Get_Weather", "type": "main", "index": 0}]]},
+        "Get_Weather": {"main": [[{"node": "Compile_Widget_Data", "type": "main", "index": 0}]]},
+        "Compile_Widget_Data": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+      }
+    },
+    {
+      "name": "06_Location_Handler",
+      "active": true,
+      "nodes": [
+        {
+          "parameters": {
+            "path": "location",
+            "httpMethod": "POST",
+            "responseMode": "responseNode"
+          },
+          "id": "wh-loc",
+          "name": "Webhook",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [250, 300]
+        },
+        {
+          "parameters": {
+            "jsCode": "const data = $input.first().json;\nconst location = data.location?.toLowerCase();\nconst action = data.action?.toLowerCase();\nconst timestamp = new Date(data.timestamp || Date.now());\n\n// Store arrival time for later calculation\nlet message = '';\nlet hoursWorked = 0;\n\nif (action === 'arrived') {\n  message = `Arrived at ${location} at ${timestamp.toLocaleTimeString()}`;\n} else if (action === 'left') {\n  // Would calculate from stored arrival time in real implementation\n  hoursWorked = 8; // Placeholder\n  message = `Left ${location}. Worked approximately ${hoursWorked} hours.`;\n}\n\nreturn {\n  json: {\n    location,\n    action,\n    timestamp: timestamp.toISOString(),\n    message,\n    hours_worked: hoursWorked\n  }\n};"
+          },
+          "id": "process-loc",
+          "name": "Process_Location",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [450, 300]
+        },
+        {
+          "parameters": {
+            "url": "https://ntfy.sh/nexus-location",
+            "method": "POST",
+            "sendHeaders": true,
+            "headerParameters": {
+              "parameters": [
+                {"name": "Title", "value": "=📍 {{ $json.action === 'arrived' ? 'Arrived' : 'Left' }} {{ $json.location }}"},
+                {"name": "Priority", "value": "low"},
+                {"name": "Tags", "value": "={{ $json.location }}"}
+              ]
+            },
+            "sendBody": true,
+            "body": "={{ $json.message }}"
+          },
+          "id": "notify-loc",
+          "name": "Send_Notification",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4,
+          "position": [650, 400]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ $json }}"
+          },
+          "id": "resp-loc",
+          "name": "Respond",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1,
+          "position": [850, 300]
+        }
+      ],
+      "connections": {
+        "Webhook": {"main": [[{"node": "Process_Location", "type": "main", "index": 0}]]},
+        "Process_Location": {"main": [[{"node": "Send_Notification", "type": "main", "index": 0}, {"node": "Respond", "type": "main", "index": 0}]]}
+      }
+    }
+  ],
+  "setup_instructions": {
+    "step_1": "Get API keys from: Groq (console.groq.com), Gemini (aistudio.google.com), OpenRouter (openrouter.ai)",
+    "step_2": "In n8n, go to Settings → Environment Variables → Add: GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY",
+    "step_3": "Import each workflow via Workflows → Import from File",
+    "step_4": "Activate each workflow",
+    "step_5": "Test with: curl -X POST http://localhost:5678/webhook/ai-router -H 'Content-Type: application/json' -d '{\"query\": \"Hello!\"}'"
+  }
+}

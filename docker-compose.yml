@@ -93,6 +93,10 @@ services:
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
       - EXECUTIONS_DATA_PRUNE=true
       - EXECUTIONS_DATA_MAX_AGE=72
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GOOGLE_AI_API_KEY=${GOOGLE_AI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     volumes:
       - ./data/n8n:/home/node/.n8n
     ports:
@@ -138,19 +142,6 @@ services:
         limits:
           memory: 256M
 
-  ollama:
-    image: ollama/ollama
-    container_name: nexus-ollama
-    restart: unless-stopped
-    volumes:
-      - ./data/ollama:/root/.ollama
-    ports:
-      - "11434:11434"
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-
 networks:
   default:
     name: nexus-network
@@ -162,4 +153,3 @@ volumes:
   n8n_data:
   syncthing_data:
   vaultwarden_data:
-  ollama_data:
