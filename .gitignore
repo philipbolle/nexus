@@ -44,7 +44,12 @@ Thumbs.db
 HANDOFF.md
 test_output/
 .claude/
+docker-compose.yml.backup
 
 # Home Assistant runtime files
+config/homeassistant/.HA_VERSION
+config/homeassistant/.ha_run.lock
 config/homeassistant/home-assistant_v2.db*
+config/homeassistant/home-assistant.log*
+config/homeassistant/home-assistant.log.fault
 config/homeassistant/.storage/
