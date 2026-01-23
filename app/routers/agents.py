@@ -30,6 +30,8 @@ from ..agents.base import AgentStatus
 from ..agents.registry import AgentRegistry
 from ..agents.tools import ToolSystem
 from ..agents.email_intelligence import register_email_agent
+from ..agents.decision_support import register_decision_support_agent
+from ..agents.code_review import register_code_review_agent
 from ..agents.sessions import SessionManager, SessionConfig
 from ..agents.orchestrator import OrchestratorEngine
 from ..agents.memory import MemorySystem
@@ -78,6 +80,20 @@ async def initialize_agent_framework() -> None:
             logger.info("Email agent registered successfully")
         except Exception as e:
             logger.warning(f"Failed to register email agent: {e}. System will continue without email agent.")
+
+        # Register decision support agent
+        try:
+            await register_decision_support_agent()
+            logger.info("Decision support agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register decision support agent: {e}. System will continue without decision support agent.")
+
+        # Register code review agent
+        try:
+            await register_code_review_agent()
+            logger.info("Code review agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register code review agent: {e}. System will continue without code review agent.")
 
         _components_initialized = True
         logger.info("Agent framework components initialized successfully")
@@ -423,15 +439,44 @@ async def submit_task(
             agent_id = selected_agent.id
 
         # Submit task to orchestrator
-        result = await orchestrator.submit_task(
+        task_id = await orchestrator.submit_task(
             task=validated_task,
-            agent_id=agent_id,
-            session_id=task_request.session_id,
             context=task_request.context,
             priority=task_request.priority
         )
 
-        return result
+        # Get task status for response
+        task_data = await orchestrator.get_task_status(task_id)
+        if not task_data:
+            raise HTTPException(status_code=500, detail="Task submission failed")
+
+        # Get agent info
+        agent = await registry.get_agent(agent_id)
+        agent_name = agent.name if agent else "Unknown"
+
+        # Convert to TaskResponse
+        from uuid import UUID
+        response_data = {
+            "task_id": UUID(task_data["task_id"]),
+            "description": task_data["description"],
+            "status": task_data["status"],
+            "progress": task_data["progress"],
+            "subtasks": task_data["subtasks"],
+            "submitted_at": task_data["submitted_at"],
+            "started_at": task_data.get("started_at"),
+            "completed_at": task_data.get("completed_at"),
+            "error": task_data.get("error"),
+            "success": task_data.get("status") != "failed",
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "session_id": task_request.session_id,
+            "result": None,
+            "error_type": None,
+            "metrics": {},
+            "processing_time_ms": 0
+        }
+
+        return TaskResponse(**response_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
@@ -447,10 +492,33 @@ async def get_task_status(
     orchestrator: OrchestratorEngine = Depends(get_orchestrator)
 ):
     """Get the status and result of a specific task."""
-    task = await orchestrator.get_task_status(task_id)
-    if not task:
+    task_data = await orchestrator.get_task_status(task_id)
+    if not task_data:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+
+    # Convert to TaskResponse
+    from uuid import UUID
+    response_data = {
+        "task_id": UUID(task_data["task_id"]),
+        "description": task_data["description"],
+        "status": task_data["status"],
+        "progress": task_data["progress"],
+        "subtasks": task_data["subtasks"],
+        "submitted_at": task_data["submitted_at"],
+        "started_at": task_data.get("started_at"),
+        "completed_at": task_data.get("completed_at"),
+        "error": task_data.get("error"),
+        "success": task_data.get("status") != "failed",
+        "agent_id": None,
+        "agent_name": None,
+        "session_id": None,
+        "result": None,
+        "error_type": None,
+        "metrics": {},
+        "processing_time_ms": 0
+    }
+
+    return TaskResponse(**response_data)
 
 
 @router.post("/tasks/{task_id}/cancel", response_model=TaskResponse)

@@ -36,12 +36,12 @@
 - **Swarm API Endpoints**: 14+ endpoints for swarm management and distributed tasks (`app/routers/swarm.py`, `app/routers/distributed_tasks.py`)
 
 **🔧 IN PROGRESS / PARTIALLY COMPLETE:**
-- **Documentation Updates**: Swarm communication layer documented; agent framework documentation still needed
+- **Documentation Updates**: ✅ Swarm communication layer documented; ✅ Agent framework documentation completed
 - **Test Suite**: Test infrastructure foundation created (pytest), comprehensive suite needed for agent framework and swarm components
 - **Production Readiness**: Error handling, logging, monitoring, backup/recovery (basic backup implemented)
 
 **📋 REMAINING WORK (Priority Order):**
-1. **Medium Priority**: Update documentation with complete agent framework examples (swarm documentation completed)
+1. **Medium Priority**: ✅ Update documentation with complete agent framework examples (swarm documentation completed) - **COMPLETED**
 2. **Medium Priority**: Create comprehensive test suite covering all components (especially agent framework and swarm)
 3. **Medium Priority**: Implement production readiness features
 4. **Next Phase**: Create Finance Agent
@@ -54,6 +54,382 @@
 - **Evolution System**: ~85% complete (database tables fixed, APIs working, memory integration complete)
 - **Integration Issues**: ~95% resolved (all high-priority integrations completed)
 - **Overall Completion**: ~92% of Phase 5 implementation plan
+
+## NEXUS Multi-Agent Framework
+
+NEXUS implements a comprehensive multi-agent framework for intelligent task decomposition, agent coordination, and specialized domain expertise. The framework provides hierarchical agent orchestration with capabilities-based routing, shared memory systems, and integrated tool execution.
+
+### Core Components
+
+#### 1. Base Agent System (`app/agents/base.py`)
+- **Purpose**: Abstract foundation for all agents with lifecycle management
+- **Features**:
+  - Agent lifecycle states (CREATED, IDLE, PROCESSING, ERROR, STOPPED)
+  - Agent types (DOMAIN, ORCHESTRATOR, SUPERVISOR, WORKER, ANALYZER, EMAIL_INTELLIGENCE)
+  - Tool integration and execution
+  - Memory access and session management
+  - Performance metrics collection
+- **Key Classes**: `BaseAgent`, `AgentStatus`, `AgentType`
+
+#### 2. Agent Registry (`app/agents/registry.py`)
+- **Purpose**: Central registry for agent discovery and lifecycle management
+- **Features**:
+  - Singleton pattern for global access
+  - Capability-based agent matching
+  - Domain specialization indexing
+  - Agent initialization and shutdown coordination
+- **Key Classes**: `AgentRegistry`, `RegistryStatus`
+
+#### 3. Tool System (`app/agents/tools.py`)
+- **Purpose**: Standardized tool definition, validation, and execution
+- **Features**:
+  - Tool types (DATABASE, API, FILE, CALCULATION, NOTIFICATION, WEB_SEARCH, HOME_AUTOMATION)
+  - Parameter validation with type checking
+  - Tool execution with timeout and retry logic
+  - Tool registration and discovery
+- **Key Classes**: `ToolSystem`, `ToolDefinition`, `ToolParameter`, `ToolType`
+
+#### 4. Memory System (`app/agents/memory.py`)
+- **Purpose**: Shared vector memory with semantic search and agent isolation
+- **Features**:
+  - Memory types (SEMANTIC, EPISODIC, PROCEDURAL, WORKING)
+  - ChromaDB integration for vector storage
+  - Agent-specific memory namespaces
+  - Memory consolidation and pruning
+  - In-context memory block management
+- **Key Classes**: `MemorySystem`, `MemoryType`, `MemoryQuery`, `MemoryBlock`
+
+#### 5. Session Management (`app/agents/sessions.py`)
+- **Purpose**: Conversation context and cost tracking across agent interactions
+- **Features**:
+  - Session types (CHAT, TASK, AUTOMATION, COLLABORATION, ANALYSIS)
+  - Message history with tool call attribution
+  - Cost tracking per session and per agent
+  - Automatic session cleanup and archiving
+- **Key Classes**: `SessionManager`, `SessionType`, `SessionConfig`
+
+#### 6. Orchestrator Engine (`app/agents/orchestrator.py`)
+- **Purpose**: Intelligent task decomposition and agent delegation
+- **Features**:
+  - Task decomposition strategies (HIERARCHICAL, SEQUENTIAL, PARALLEL, DIVIDE_CONQUER)
+  - Delegation strategies (CAPABILITY_MATCH, DOMAIN_EXPERT, LOAD_BALANCED, COST_OPTIMIZED)
+  - Critical path analysis for task dependencies
+  - Result aggregation and error handling
+- **Key Classes**: `OrchestratorEngine`, `DecompositionStrategy`, `DelegationStrategy`, `Subtask`
+
+#### 7. Performance Monitoring (`app/agents/monitoring.py`)
+- **Purpose**: Real-time metrics collection, alerting, and health checks
+- **Features**:
+  - Metric types (LATENCY, COST, SUCCESS_RATE, TOKEN_USAGE, ERROR_RATE)
+  - Alert severity levels (INFO, WARNING, ERROR, CRITICAL)
+  - Anomaly detection and threshold-based alerts
+  - Performance dashboards and reporting
+- **Key Classes**: `PerformanceMonitor`, `MetricType`, `AlertSeverity`, `Alert`
+
+### Agent Types
+
+#### 1. DomainAgent (Base Class)
+- **Purpose**: Specialized agents for specific domains (finance, health, email, etc.)
+- **Examples**: `EmailIntelligenceAgent`, `DecisionSupportAgent`, `CodeReviewAgent`, `FinanceAgent` (planned)
+- **Capabilities**: Domain-specific knowledge and tools
+
+#### 2. OrchestratorAgent
+- **Purpose**: Coordinates multiple agents for complex tasks
+- **Features**: Task decomposition, agent delegation, result aggregation
+- **Example**: `NexusMasterAgent` extends this class
+
+#### 3. AnalyzerAgent
+- **Purpose**: Analysis and insight generation from data
+- **Features**: Pattern recognition, trend analysis, recommendation generation
+
+#### 4. EmailIntelligenceAgent (`app/agents/email_intelligence.py`)
+- **Purpose**: Intelligent email processing with classification and automation
+- **Capabilities**:
+  - Email classification (spam, promo, social, financial, work, personal, important)
+  - Transaction extraction and logging
+  - Automated email actions (archive, delete, mark as read)
+  - Alert generation for important emails
+  - Learning from user feedback
+- **Integration**: Connected to Gmail/iCloud via IMAP, integrates with finance tracker
+
+#### 5. DecisionSupportAgent (`app/agents/decision_support.py`)
+- **Purpose**: Helps with analysis paralysis and architectural decisions by providing structured analysis, risk assessment, and actionable recommendations
+- **Capabilities**:
+  - Decision analysis with pros/cons evaluation
+  - Risk assessment with probability and impact analysis
+  - Architectural review and tradeoff analysis
+  - Recommendation generation with justification
+  - Learning from past decisions via memory system
+- **Integration**: Uses AI analysis for decision scenarios, integrates with memory system for pattern learning
+
+#### 6. CodeReviewAgent (`app/agents/code_review.py`)
+- **Purpose**: Performs comprehensive code reviews with security auditing, performance analysis, style checking, and vulnerability detection
+- **Capabilities**:
+  - Code analysis and quality assessment
+  - Security audit for vulnerabilities (SQL injection, XSS, etc.)
+  - Performance review and optimization suggestions
+  - Style checking and best practices enforcement
+  - Dependency analysis and vulnerability scanning
+  - Learning from past reviews via memory system
+- **Integration**: Uses static analysis patterns, integrates with memory system for code pattern learning
+
+#### 7. NexusMasterAgent (`app/agents/nexus_master.py`)
+- **Purpose**: Philip's personal AI companion and unified interface
+- **Features**:
+  - Single point of contact for all AI interactions
+  - Complete system access via MCP integration
+  - Agent orchestration and coordination
+  - Long-term relationship memory with Philip
+  - Personality modes (ASSISTANT, COMPANION, ADVISOR, ORCHESTRATOR, PREMIUM)
+- **Philosophy**: More than software - Philip's trusted companion and "second brain"
+
+### Database Schema
+
+The agent framework uses dedicated PostgreSQL tables (created in `schema/00_NEXUS_ULTIMATE_SCHEMA.sql`):
+
+#### Core Tables (USED):
+- ✅ **agents**: Agent definitions and metadata (id, name, type, domain, capabilities, system_prompt)
+- ✅ **agent_tools**: Tool definitions available to agents
+- ✅ **agent_tool_assignments**: Which agents can use which tools
+- ✅ **sessions**: Conversation sessions with cost tracking
+- ✅ **messages**: Individual messages within sessions
+- ✅ **tool_executions**: Tool execution history and results
+- ✅ **memory_blocks**: Vector memory storage with embeddings
+- ✅ **memory_relations**: Relationships between memory blocks
+- ✅ **memory_access_log**: Memory retrieval history
+- ✅ **agent_performance**: Performance metrics for agents
+- ✅ **agent_events**: Agent lifecycle events and state changes
+
+#### Advanced Tables (OPTIONAL):
+- ⚠️ **agent_handoffs**: Agent-to-agent task handoffs
+- ⚠️ **agent_suggestions**: Agent-generated suggestions
+- ⚠️ **agent_collaborations**: Multi-agent collaboration records
+- ⚠️ **agent_versions**: Version history for agent configurations
+- ⚠️ **agent_experiments**: A/B testing configurations for agents
+- ⚠️ **memory_consolidation_jobs**: Background memory consolidation tasks
+- ⚠️ **memory_clusters**: Clustered memory groups
+- ⚠️ **memory_cluster_members**: Members of memory clusters
+
+### API Endpoints (`app/routers/agents.py`)
+
+The agent framework exposes 31 RESTful API endpoints for comprehensive agent management:
+
+#### Agent Management (8 endpoints):
+- ✅ `GET /agents` - List all agents
+- ✅ `POST /agents` - Create new agent
+- ✅ `GET /agents/{agent_id}` - Get agent details
+- ✅ `PUT /agents/{agent_id}` - Update agent
+- ✅ `DELETE /agents/{agent_id}` - Delete agent
+- ✅ `POST /agents/{agent_id}/start` - Start agent
+- ✅ `POST /agents/{agent_id}/stop` - Stop agent
+- ✅ `GET /agents/{agent_id}/status` - Agent status and metrics
+
+#### Registry Operations (2 endpoints):
+- ✅ `GET /registry-status` - Agent registry status
+- ✅ `POST /registry-select-agent` - Select agent for task based on capabilities
+
+#### Task Execution (3 endpoints):
+- ✅ `POST /tasks` - Submit task for execution
+- ✅ `GET /tasks/{task_id}` - Get task status
+- ✅ `POST /tasks/{task_id}/cancel` - Cancel task
+
+#### Session Management (6 endpoints):
+- ✅ `POST /sessions` - Create new session
+- ✅ `GET /sessions/{session_id}` - Get session details
+- ✅ `GET /sessions` - List all sessions
+- ✅ `POST /sessions/{session_id}/messages` - Add message to session
+- ✅ `GET /sessions/{session_id}/messages` - Get session messages
+- ✅ `POST /sessions/{session_id}/end` - End session
+
+#### Tool System (3 endpoints):
+- ✅ `GET /tools` - List registered tools
+- ✅ `POST /tools` - Register new tool
+- ✅ `POST /tools/execute` - Execute tool directly
+
+#### Performance & Monitoring (5 endpoints):
+- ✅ `GET /agents/{agent_id}/performance` - Agent performance metrics
+- ✅ `GET /system/performance` - System performance metrics
+- ✅ `GET /system/alerts` - System alerts
+- ✅ `GET /agents/{agent_id}/errors` - Get agent errors
+- ✅ `POST /agents/{agent_id}/errors/{error_id}/resolve` - Resolve agent error
+
+#### Advanced Features (4 endpoints):
+- ✅ `POST /agents/{agent_id}/delegate` - Delegate task to another agent
+- ✅ `GET /memory/{agent_id}` - Get agent memories
+- ✅ `POST /memory/{agent_id}/query` - Query agent memory
+- ✅ `POST /memory/{agent_id}/store` - Store new memory
+
+### Usage Examples
+
+#### 1. Creating and Using a Domain Agent
+```python
+from app.agents.base import BaseAgent, AgentType
+from app.agents.registry import registry
+
+# Create a finance agent
+class FinanceAgent(BaseAgent):
+    def __init__(self):
+        super().__init__(
+            name="Finance Agent",
+            agent_type=AgentType.DOMAIN,
+            domain="finance",
+            capabilities=["expense_tracking", "budget_analysis", "debt_progress"],
+            system_prompt="You are a financial assistant..."
+        )
+
+    async def process_expense(self, expense_data):
+        # Custom finance logic
+        return await self.execute_task("Analyze expense", expense_data)
+
+# Register and use the agent
+agent = FinanceAgent()
+await registry.register_agent(agent)
+await agent.initialize()
+result = await agent.process_expense({"amount": 25.99, "category": "food"})
+```
+
+#### 2. Using the Tool System
+```python
+from app.agents.tools import ToolSystem, ToolDefinition, ToolParameter
+
+tool_system = ToolSystem()
+
+# Register a database query tool
+await tool_system.register_tool(ToolDefinition(
+    name="query_database",
+    display_name="Database Query",
+    description="Execute SQL queries on the NEXUS database",
+    tool_type=ToolType.DATABASE,
+    parameters=[
+        ToolParameter("query", "string", "SQL query to execute", required=True),
+        ToolParameter("params", "array", "Query parameters", required=False)
+    ]
+))
+
+# Execute the tool
+result = await tool_system.execute_tool(
+    tool_name="query_database",
+    agent_id="finance_agent_123",
+    parameters={"query": "SELECT * FROM expenses WHERE amount > 100"}
+)
+```
+
+#### 3. Creating a Session with Memory
+```python
+from app.agents.sessions import SessionManager, SessionConfig, SessionType
+from app.agents.memory import MemorySystem, MemoryType
+
+session_manager = SessionManager()
+memory_system = MemorySystem()
+
+# Create a new analysis session
+session = await session_manager.create_session(
+    session_type=SessionType.ANALYSIS,
+    config=SessionConfig(
+        max_messages=50,
+        enable_cost_tracking=True,
+        auto_generate_summary=True
+    )
+)
+
+# Store context in memory
+await memory_system.store_memory(
+    agent_id="analysis_agent",
+    content="User is analyzing monthly expenses for budget planning",
+    memory_type=MemoryType.SEMANTIC,
+    tags=["budget", "analysis", "finance"]
+)
+
+# Query relevant memories
+memories = await memory_system.query_memories(
+    query_text="budget planning expenses",
+    agent_id="analysis_agent",
+    limit=5
+)
+```
+
+#### 4. Task Decomposition with Orchestrator
+```python
+from app.agents.orchestrator import OrchestratorEngine, DecompositionStrategy
+
+orchestrator = OrchestratorEngine()
+
+# Decompose a complex task
+decomposition = await orchestrator.decompose_task(
+    task_description="Analyze monthly finances and generate budget recommendations",
+    strategy=DecompositionStrategy.HIERARCHICAL
+)
+
+# Delegate subtasks to appropriate agents
+for subtask in decomposition.subtasks:
+    agent_id = await orchestrator.select_agent_for_subtask(
+        subtask=subtask,
+        strategy=DelegationStrategy.CAPABILITY_MATCH
+    )
+    await orchestrator.delegate_subtask(subtask.id, agent_id)
+```
+
+### Integration with Existing Services
+
+The agent framework integrates seamlessly with existing NEXUS services:
+
+#### 1. AI Service Integration
+- **Cost Cascade**: Agents use `app.services.ai.chat()` for AI calls with cost optimization
+- **Semantic Caching**: Automatic caching via `app.services.semantic_cache` (0.92 similarity threshold)
+- **Provider Routing**: Groq → DeepSeek → Gemini → OpenRouter → Anthropic cascade
+
+#### 2. Database Integration
+- **Connection Pooling**: Uses shared `app.database.db` asyncpg connection pool
+- **Schema Alignment**: All tables follow NEXUS conventions (UUID primary keys, timestamps)
+- **Transaction Management**: Proper async transaction handling
+
+#### 3. Email Intelligence Integration
+- **Backward Compatibility**: `EmailIntelligenceAgent` maintains existing email API endpoints
+- **Service Reuse**: Uses existing `app.services.email_client`, `app.services.email_learner`
+- **Unified Interface**: Same `/email/*` endpoints work with both old and new implementations
+
+#### 4. Memory System Integration
+- **ChromaDB**: Vector storage for semantic memory
+- **PostgreSQL**: Structured memory metadata and relations
+- **Embeddings**: Uses `app.services.embeddings` for text embeddings
+
+#### 5. Monitoring Integration
+- **API Usage**: All AI calls logged to `api_usage` table
+- **Cost Tracking**: Session-based cost attribution
+- **Performance Metrics**: Integrated with existing monitoring infrastructure
+
+### Testing
+
+Comprehensive test infrastructure available:
+
+```bash
+# Run agent framework tests
+python scripts/test_api.py --module agents
+
+# Test specific components
+python -m pytest tests/unit/test_agents.py -v
+python -m pytest tests/unit/test_tools.py -v
+python -m pytest tests/unit/test_memory.py -v
+
+# Integration tests with running services
+python scripts/test_api.py --endpoint /agents
+python scripts/test_api.py --endpoint /sessions
+```
+
+**Test Coverage**:
+- Unit tests for individual components (agents, tools, memory, sessions)
+- Integration tests for API endpoints
+- End-to-end tests for complete agent workflows
+- Performance tests for memory and orchestration systems
+
+### Configuration
+
+- **Database Connection**: Configured via `DATABASE_URL` environment variable
+- **ChromaDB URL**: Configured via `CHROMA_URL` (default: `http://localhost:8000`)
+- **Embedding Model**: Uses `all-MiniLM-L6-v2` via sentence-transformers
+- **Memory Settings**: Configurable similarity thresholds, retention policies
+- **Session Settings**: Configurable message limits, cost tracking, cleanup intervals
+- **Tool System**: Configurable timeouts, retry limits, confirmation requirements
 
 ## Simplified Swarm Communication Layer ("Tiny Swarm")
 

@@ -44,6 +44,8 @@ class AgentType(Enum):
     SUPERVISOR = "supervisor"   # Manages subordinate agents
     WORKER = "worker"           # Task-specific agent
     ANALYZER = "analyzer"       # Analysis and insight generation
+    DECISION_SUPPORT = "decision_support"  # Decision support and analysis agent
+    CODE_REVIEW = "code_review"  # Code review and quality assurance agent
 
 
 class BaseAgent(ABC):

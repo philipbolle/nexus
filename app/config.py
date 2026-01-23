@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     # Cost limits
     daily_budget_usd: float = Field(default=1.0)
     monthly_budget_usd: float = Field(default=3.0)
+    environment: str = Field(default="development", alias="ENVIRONMENT")
 
     @property
     def database_url(self) -> str:

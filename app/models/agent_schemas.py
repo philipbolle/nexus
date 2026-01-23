@@ -83,15 +83,26 @@ class TaskRequest(BaseModel):
 class TaskResponse(BaseModel):
     """Response schema for task execution."""
 
-    success: bool
-    agent_id: UUID
-    agent_name: str
-    session_id: UUID
-    result: Optional[Dict[str, Any]] = None
+    # Core task fields from orchestrator
+    task_id: UUID
+    description: str
+    status: str
+    progress: Dict[str, Any]
+    subtasks: List[Dict[str, Any]]
+    submitted_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     error: Optional[str] = None
+
+    # Original fields (optional for backward compatibility)
+    success: bool = True
+    agent_id: Optional[UUID] = None
+    agent_name: Optional[str] = None
+    session_id: Optional[UUID] = None
+    result: Optional[Dict[str, Any]] = None
     error_type: Optional[str] = None
-    metrics: Dict[str, Any]
-    processing_time_ms: int
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    processing_time_ms: int = 0
 
 
 class SessionCreate(BaseModel):

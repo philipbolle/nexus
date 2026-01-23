@@ -151,10 +151,22 @@ class AgentRegistry:
         if agent_type not in self.agent_types:
             raise ValueError(f"Unknown agent type: {agent_type}")
 
-        # Check for duplicate name
+        # Check for duplicate name (in memory and database)
         for agent in self.agents.values():
             if agent.name == name:
                 raise ValueError(f"Agent with name '{name}' already exists")
+
+        # Also check database for duplicate name
+        try:
+            existing_agent = await db.fetch_one(
+                "SELECT id FROM agents WHERE name = $1 AND is_active = true",
+                name
+            )
+            if existing_agent:
+                raise ValueError(f"Agent with name '{name}' already exists in database")
+        except Exception as e:
+            logger.warning(f"Failed to check database for duplicate agent name '{name}': {e}")
+            # Continue anyway - database constraint will catch it if it's a duplicate
 
         # Create agent instance
         agent_class = self.agent_types[agent_type]
@@ -344,7 +356,29 @@ class AgentRegistry:
         """
         if isinstance(agent_id, UUID):
             agent_id = str(agent_id)
-        return self.agents.get(agent_id)
+
+        # Check in-memory agents first
+        agent = self.agents.get(agent_id)
+        if agent:
+            return agent
+
+        # If not found in memory, try to load from database
+        try:
+            agent_data = await db.fetch_one(
+                """
+                SELECT id, name, agent_type, domain, description, system_prompt,
+                       capabilities, supervisor_id, config
+                FROM agents WHERE id = $1 AND is_active = true
+                """,
+                UUID(agent_id)
+            )
+            if agent_data:
+                # Load agent from database data
+                return await self._load_agent_from_db_data(agent_data)
+        except Exception as e:
+            logger.warning(f"Failed to load agent {agent_id} from database: {e}")
+
+        return None
 
     async def get_agent_by_name(self, name: str) -> Optional[BaseAgent]:
         """
@@ -356,9 +390,28 @@ class AgentRegistry:
         Returns:
             Agent instance or None if not found
         """
+        # First check in-memory agents
         for agent in self.agents.values():
             if agent.name == name:
                 return agent
+
+        # If not found in memory, check database
+        try:
+            agent_data = await db.fetch_one(
+                """
+                SELECT id, name, agent_type, domain, description, system_prompt,
+                       capabilities, supervisor_id, config
+                FROM agents WHERE name = $1 AND is_active = true
+                """,
+                name
+            )
+            if agent_data:
+                # Agent exists in database but not in memory
+                # Load it from database
+                return await self._load_agent_from_db_data(agent_data)
+        except Exception as e:
+            logger.warning(f"Failed to check database for agent with name '{name}': {e}")
+
         return None
 
     async def find_agents_by_capability(self, capability: str) -> List[BaseAgent]:
@@ -535,6 +588,8 @@ class AgentRegistry:
         from .base import DomainAgent, OrchestratorAgent
         from .email_intelligence import EmailIntelligenceAgent
         from .swarm.agent import SwarmAgent
+        from .decision_support import DecisionSupportAgent
+        from .code_review import CodeReviewAgent
 
         builtin_types = {
             "domain": DomainAgent,
@@ -543,6 +598,8 @@ class AgentRegistry:
             "worker": SwarmAgent,  # Task-specific agents with swarm capabilities
             "supervisor": SwarmAgent,  # Manager agents with swarm capabilities
             "analyzer": DomainAgent,  # Analysis agents (default to DomainAgent)
+            "decision_support": DecisionSupportAgent,
+            "code_review": CodeReviewAgent,
         }
 
         for type_name, agent_class in builtin_types.items():
@@ -898,6 +955,76 @@ class AgentRegistry:
         # Unexpected type
         logger.warning(f"Unexpected config type {type(config_value)}, using empty dict")
         return {}
+
+    async def _load_agent_from_db_data(self, agent_data: dict) -> Optional[BaseAgent]:
+        """
+        Load an agent from database data.
+
+        Args:
+            agent_data: Agent data from database query
+
+        Returns:
+            Agent instance or None if failed to load
+        """
+        try:
+            # Determine agent type
+            agent_type = agent_data["agent_type"]
+            if agent_type not in self.agent_types:
+                logger.warning(f"Unknown agent type '{agent_type}' for agent {agent_data['name']}, skipping")
+                return None
+
+            # Create agent instance
+            agent_class = self.agent_types[agent_type]
+
+            # Convert agent_type string to AgentType enum
+            try:
+                agent_type_enum = AgentType(agent_type)
+            except ValueError:
+                logger.warning(f"Unknown AgentType enum value '{agent_type}' for agent {agent_data['name']}, defaulting to DOMAIN")
+                agent_type_enum = AgentType.DOMAIN
+
+            kwargs = {
+                "agent_id": str(agent_data["id"]),
+                "name": agent_data["name"],
+                "agent_type": agent_type_enum,
+                "description": agent_data["description"],
+                "system_prompt": agent_data["system_prompt"],
+                "capabilities": agent_data["capabilities"] or [],
+                "supervisor_id": str(agent_data["supervisor_id"]) if agent_data["supervisor_id"] else None,
+                "config": self._normalize_config(agent_data.get("config"))
+            }
+            if agent_type == "domain":
+                kwargs["domain"] = agent_data["domain"] if agent_data["domain"] else "general"
+
+            # Handle swarm-specific parameters for SwarmAgent classes
+            try:
+                from .swarm.agent import SwarmAgent
+                if issubclass(agent_class, SwarmAgent):
+                    config = kwargs["config"]
+                    if config:
+                        # Extract swarm_id and swarm_role from config if present
+                        if "swarm_id" in config:
+                            kwargs["swarm_id"] = config.get("swarm_id")
+                        if "swarm_role" in config:
+                            kwargs["swarm_role"] = config.get("swarm_role", "member")
+            except ImportError:
+                # Swarm module not available, skip swarm parameter extraction
+                pass
+
+            agent = agent_class(**kwargs)
+
+            # Register but don't initialize yet
+            await self._register_agent(agent, skip_init=True)
+
+            # Initialize the agent
+            await agent.initialize()
+
+            logger.debug(f"Loaded agent from DB: {agent_data['name']}")
+            return agent
+
+        except Exception as e:
+            logger.error(f"Failed to load agent {agent_data.get('name', 'unknown')} from database data: {e}")
+            return None
 
 
 # Global registry instance

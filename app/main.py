@@ -13,13 +13,13 @@ from .database import db
 from .routers import health, chat, finance, email, agents, evolution, swarm
 # from .routers import distributed_tasks  # Disabled for simplification
 from .agents.swarm import initialize_swarm_pubsub, initialize_event_bus, close_swarm_pubsub, close_event_bus
+from .logging_config import setup_logging, get_logger
+from .middleware.error_handler import setup_error_handling
+from .monitoring_integration import monitoring_integration
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Setup centralized logging
+setup_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -46,6 +46,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize swarm Pub/Sub: {e}")
         # Continue without swarm - endpoints may fail
 
+    # Initialize monitoring integration
+    try:
+        await monitoring_integration.initialize()
+        logger.info("Monitoring integration initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize monitoring integration: {e}")
+        # Continue without monitoring integration
+
     logger.info(f"API running on port {settings.api_port}")
 
     yield
@@ -62,6 +70,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to close swarm Pub/Sub: {e}")
 
+    # Close monitoring integration
+    try:
+        await monitoring_integration.shutdown()
+        logger.info("Monitoring integration closed")
+    except Exception as e:
+        logger.error(f"Failed to close monitoring integration: {e}")
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -70,6 +85,14 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Store settings in app state for middleware access
+app.state.settings = {
+    "environment": "production" if settings.environment == "production" else "development"
+}
+
+# Setup error handling middleware
+setup_error_handling(app)
 
 # Configure CORS (allow all for Tailscale/iPhone access)
 app.add_middleware(
