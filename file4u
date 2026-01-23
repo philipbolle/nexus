@@ -1,0 +1,311 @@
+extract anything good from here as of 2026 and research them and add them to nexus maybe
+
+
+
+
+
+
+
+
+
+NEXUS HARDWARE - Micro Center Dallas
+13929 N Central Expy, Dallas, TX 75243
+Mon-Sat 10AM-
+9PM, Sun 11AM-6PM
+~20 min from Garland □ RAM: Patriot 16GB DDR4-3200 SODIMM (~$40) SKU:
+954073 OR Crucial 32GB if $70 □ SSD: SK hynix Gold P31 1TB NVMe (~$75) OR Inland TN320 1TB if budget
+tight (~$55) □ Bring: ThinkPad T14 specs screenshot □ Ask staff to verify compatibility
+Budget: $100-120
+total
+APPS (App Store): □ ShellFish ($29.99) □ Toolbox Pro ($5.99) □ Scriptable (FREE) □ ntfy (FREE) □
+Data Jar (FREE) □ Möbius Sync (FREE)
+How can I get nexus swarms to view my screen live like a video but can see what I’m trying to do when I need help
+or something?
+I wanna build crazy physical devices and robots with Claude code who are all connected to nexus
+Have Claude code constantly optimize itself to all its latest updates and relevant updates in the field and teach
+me how to use them if needed for me to know. Actually a cheap smart model
+To operate from an elite strategic position in 2026, you shouldn't just look for "chatbots." You need Inference
+Engines—APIs that provide massive volume and specialized logic. Here are the top 15 AI APIs with the most
+generous free tiers (high rate limits) and unique "special abilities" that differentiate them from general-purpose
+tools. 1. Google AI Studio (Gemini 2.5 Series) * The "Lot": Up to 1,000 requests per day (Flash-Lite) and 15
+requests per minute. * Special Ability: Massive Context (1M - 2M tokens). It can "read" a 1,000-page PDF or 10
+hours of video in a single prompt. No one else offers this much "short-term memory" for free. * Best For:
+Analyzing entire business quarters or complex legal archives. 2. Groq (Llama 3.3 & Mixtral) * The "Lot": Extremely
+high Rate Limits (thousands of tokens per minute). * Special Ability: Instantaneous Speed (300+ tokens/sec). It is
+the fastest inference engine on the planet. * Best For: Real-time translation, high-frequency trade analysis, or any
+situation where a 2-second delay is a failure. 3. DeepSeek (DeepSeek-R1 / V3) * The "Lot": 1 to 3 Million free
+tokens per month on their free tier. * Special Ability: Chain-of-Thought (CoT) Reasoning. Their R1 model is
+arguably the smartest logic model for math and coding, rivaling GPT-4o but focused purely on logical deduction. *
+Best For: Solving impossible-to-debug code or high-stakes mathematical logic. 4. Mistral AI (La Plateforme) *
+The "Lot": 1 request per second (RPS). That is 3,600 requests per hour—effectively infinite for a single person. *
+Special Ability: European Regulatory Intelligence. Mistral models are optimized for European languages and
+nuances, often outperforming US models in multi-lingual reasoning. * Best For: Multi-lingual negotiations and
+cross-border strategic planning. 5. Cerebras (Llama 3.1 & 3.3) * The "Lot": 30 requests per minute (over 43,000
+requests/day). * Special Ability: Wafer-Scale Inference. Like Groq, it is optimized for speed, but they offer access
+to the massive 405B Llama models for free, which are "GPT-4 level" in intelligence. * Best For: Running the
+"smartest" open-source models at high speed. 6. Sambanova Cloud * The "Lot": High throughput on Llama 3 and
+Qwen models. * Special Ability: Full Precision Inference. Many free APIs "compress" (quantize) models to save
+money. Sambanova runs them at full precision, meaning the AI is slightly "smarter" and more accurate than other
+free providers. * Best For: High-stakes accuracy where "hallucination" is a fatal risk. 7. OpenRouter (Free Models)
+* The "Lot": Access to a "Free Models" library that aggregates 20+ different LLMs. * Special Ability: Dynamic
+Routing. It’s one API that connects to everything. If one provider goes down, you just switch models in the same
+code. * Best For: Building robust systems that can't afford a single point of failure. 8. SiliconFlow * The "Lot": A
+unified API offering high-performance serverless inference. * Special Ability: Latency Dominance. They claim
+2.3x faster speeds than traditional cloud providers. * Best For: Developers building "lag-free" agentic
+applications. 9. Qwen (Alibaba) * The "Lot": 200+ Agent requests per day and massive token quotas for their V3
+models. * Special Ability: Agentic Reasoning. Qwen is specifically trained to use tools (search the web, call other
+APIs) better than almost any other open model. * Best For: Automating web-based research or "agentic"
+workflows. 10. Together AI * The "Lot": $25 in free credits upon sign-up (covers millions of tokens). * Special
+1/22/26, 3 52 AM
+Page 1 of 5Ability: Model Variety. They host everything from Llama 4 to specialized medical and coding models
+(CodeLlama). * Best For: "Hot-swapping" models to find the perfect logic for a specific task. 11. Cloudflare
+Workers AI * The "Lot": Free for up to 10,000 requests per day for certain models. * Special Ability: Edge
+Deployment. The AI runs on Cloudflare's servers closest to your physical location, reducing network lag to nearly
+zero. * Best For: Global applications where you need the AI to be "everywhere" at once. 12. Hugging Face
+Serverless * The "Lot": Free access to 100,000+ models for "light to medium" workloads. * Special Ability:
+Hyper-Specialization. Need an AI that only does "Legal Text in 18th Century English"? You can find it and call it
+via API here. * Best For: Niche, technical domain tasks that general models (like ChatGPT) fail at. 13. Fireworks AI
+* The "Lot": Generous free tier for their "Serverless" endpoints. * Special Ability: Elite Quantization. They use
+advanced techniques to make large models (like 405B) run on smaller hardware without losing their "IQ." * Best
+For: High-intelligence tasks on a budget. 14. Blackbox AI * The "Lot": Extremely high daily limits for coding-
+specific queries. * Special Ability: Real-time Web Search + Code. It can search the latest GitHub commits and
+documentation to answer questions about libraries that were released this morning. * Best For: Software
+engineering and technical problem-solving. 15. Perplexity (Sonar API) * The "Lot": Access to their "Sonar" models
+via API (often through credits or developer trials). * Special Ability: Fact-Checking Engine. Unlike other LLMs that
+guess, Perplexity is built to search the web first and synthesize an answer with citations. * Best For: Verifying
+claims and gathering real-world data in real-time. Comparison of the "Big Three" Strategies: | Strategy | Best
+Provider | Why? | |---|---|---| | Data Mastery | Google AI Studio | 2M context window handles "The Big Picture."
+| | Logic/Reasoning | DeepSeek | R1 model is a logic specialist. | | Speed/Volume | Groq / Mistral | Highest
+"requests per second" for constant chatting. | Would you like me to write a script that connects to one of these
+(e.g., Gemini or Groq) so you can start using your high-volume API today?
+I need an ai that can manage my context and sessions and
+1/22/26, 3 52 AM
+Page 2 of 5In the 2026 landscape, "smartness" for coding isn't just about syntax; it's about Context-Aware Reasoning (the
+ability to see your whole project) and Inference Efficiency. If you want "a LOT" of chats without hitting a wall, you
+need to look at providers that subsidize their APIs to gain developer market share. Here is the strategic ranking of
+the top 10 cheapest/free coding AI APIs based on Reasoning-to-Cost Efficiency. 1. DeepSeek (DeepSeek-V3 /
+R1) DeepSeek has completely disrupted the market by offering "reasoning" models that rival GPT-4o but at
+1/50th of the cost. * The "Lot": They often give 2–5 million tokens for free to start, and their paid tier is so cheap
+($0.20 per 1M tokens) that $5 will last a developer months of high-volume use. * Coding Ability: Their R1 model
+uses "Chain-of-Thought" reasoning, meaning it explains its logic before writing the code—essential for complex
+architecture. 2. Google AI Studio (Gemini 2.5 Flash) * The "Lot": Up to 1,500 requests per day and a staggering 1
+million token context window for free. * Coding Ability: This is the only free API that can "read" your entire
+codebase (30,000+ lines) in one go to find a bug or refactor a system. It is the king of "Repo-level"
+understanding. 3. Puter.js (Qwen 2.5 Coder / Qwen 3) * The "Lot": Puter provides a "User-Pays" bridge that
+currently allows unlimited free access to the Qwen family of models. * Coding Ability: Qwen 2.5 Coder is widely
+considered the best open-source coding model. It outperforms Llama in Python and C++ benchmarks and is
+highly "agentic" (great at using tools). 4. Mistral AI (Codestral) * The "Lot": Their "Experiment" tier allows for
+consistent, free access (approx. 1 request per second). * Coding Ability: Codestral is a specialist model. It was
+trained specifically on 80+ programming languages. It excels at "Fill-In-the-Middle" (FIM), which is the logic used
+for real-time autocomplete in IDEs like VS Code. 5. Groq (Llama 3.3 70B) * The "Lot": Extremely high Rate Limits
+(RPM). It’s not "unlimited tokens," but the frequency of chats allowed is much higher than OpenAI or Anthropic. *
+Coding Ability: Speed. Groq is so fast (300+ tokens/sec) that it makes the coding experience feel like a live
+conversation. Best for quick boilerplate and unit tests. 6. SiliconFlow * The "Lot": One of the cheapest providers
+globally ($0.05–$0.08 per 1M tokens). * Coding Ability: They host DeepSeek-V3 and Qwen-Coder at "full
+precision," meaning the model isn't "dumbed down" to save server space. You get the smartest version of the
+model for pennies. 7. Blackbox AI * The "Lot": Very aggressive free tier specifically for the coding community. *
+Coding Ability: It has a "Real-time Web Search" feature built into the coding API. If you’re using a library that was
+updated yesterday, Blackbox can find the new documentation, whereas most LLMs would hallucinate the old
+version. 8. Together AI * The "Lot": They provide $25 in free credits upon sign-up. Because their models (like
+Llama 4 Scout) are so cheap, $25 can easily cover 10 million+ tokens. * Coding Ability: Huge variety. You can
+"hot-swap" between 50 different coding models to see which one handles your specific framework (React, Rust,
+etc.) most accurately. 9. OpenRouter (Free Library) * The "Lot": A unified API that aggregates all "Free" models
+from other providers into one list. * Coding Ability: It allows you to build a coding agent that never "dies"—if one
+free provider goes down, OpenRouter automatically switches you to another free coding model. 10. Cerebras
+(Llama 3.1 405B) * The "Lot": High-volume free tier for their "Wafer-Scale" inference. * Coding Ability: It gives
+you free access to Llama 405B, the largest open-source model. It has the raw "IQ" to handle high-stakes logic
+that smaller models (like 8B or 70B) fail to grasp. Strategy Comparison: Coding Logic vs. Context | Strategy | API
+to Use | Why? | |---|---|---| | Full Repo Analysis | Gemini 2.5 Flash | Can see 1M tokens of code at once. | | Hard
+Logic / Debugging | DeepSeek-R1 | Uses "Thinking" mode to solve math/logic. | | Daily High-Volume Work |
+Puter.js (Qwen) | Unlimited free requests for standard tasks. | Would you like me to generate a specific API
+integration script for any of these so you can test their coding "IQ" yourself?
+1/22/26, 3 52 AM
+Page 3 of 5To achieve true "headless" automation on iOS (where the AI works in the background without opening an app),
+you shouldn't use the standard apps. You should use the "Get Contents of URL" action in Shortcuts to talk directly
+to their APIs. Here is the strategic ranking of the top 10 free AI APIs for iOS Shortcuts in 2026, ranked by Rate
+Limits, Reliability, and Ease of "Headless" Integration: 1. Google AI Studio (Gemini 2.5 Flash) This is the gold
+standard for free automation. Google provides a massive daily quota to entice developers. * The "Lot": 1,500
+requests per day and 15 requests per minute. * Special Ability: Massive Context. You can have a Shortcut that
+"scrapes" a long article or your entire day’s calendar and sends the whole thing to Gemini for a summary in one
+go. * iOS Vibe: Very easy to parse its JSON response in Shortcuts. 2. OpenRouter (Free Tier) OpenRouter is a
+"unified" API. You get one API key that lets you access multiple free models (Llama 3.3, Mistral, Gemma 2, etc.). *
+The "Lot": They aggregate over 18+ completely free models. If one model hits a limit, you just change the model
+ID in your Shortcut and keep going. * Special Ability: Model Diversity. You can use specialized coding models (like
+Devstral 2) or reasoning models (like DeepSeek-R1) all via the same URL. * iOS Vibe: Use the model ID suffix :free
+to ensure you never get billed. 3. GroqCloud If your Shortcut needs to feel "instant" (e.g., a voice-to-text reply),
+Groq is the winner. * The "Lot": High RPM (Requests Per Minute) limits. While they have daily token caps, the
+speed is the real draw. * Special Ability: Latency. It generates text at 300+ tokens per second. Your Shortcut will
+finish running before you even lock your phone. * iOS Vibe: Best for "Hey Siri" triggers where you don't want to
+wait 5 seconds for a response. 4. Cloudflare Workers AI Cloudflare is an infrastructure giant. Their free tier for AI
+is designed for high-volume background tasks. * The "Lot": Up to 10,000 free neurons (requests) per day on their
+Free plan. * Special Ability: Edge Execution. Since it runs on Cloudflare's global network, the "path" from your
+iPhone to the AI is extremely short, making it highly reliable on cellular data. * iOS Vibe: Incredible for small,
+repetitive tasks like "Categorize this receipt" or "Translate this clipboard text." 5. Mistral AI (La Plateforme) Mistral
+is the pride of European AI and offers a very stable "Experiment" tier. * The "Lot": 1 request per second. That’s
+3,600 chats per hour. It’s nearly impossible to hit this limit as a single user. * Special Ability: Efficiency. Their
+"Mistral Small" and "Codestral" models are incredibly dense and follow complex instructions better than most
+large models. * iOS Vibe: Very clean API documentation makes it easy to set up the Dictionary headers in
+Shortcuts. 6. DeepSeek (Official API) The "Logic King" of 2026. DeepSeek-R1 is the model everyone uses for
+hard reasoning. * The "Lot": They frequently give out millions of free tokens to new users. For automation, a
+million tokens can last for thousands of Shortcut runs. * Special Ability: Chain-of-Thought. You can tell the
+Shortcut to "Think deeply before answering," and it will perform complex logic (math/coding) in the background.
+7. Sambanova Cloud * The "Lot": Generous free access to Meta’s massive Llama 405B model. * Special Ability:
+Full Precision. While other free APIs use "compressed" models, Sambanova runs them at full strength. It is the
+"smartest" free Llama access you can get. 8. Together AI * The "Lot": $25 in free credits upon sign-up. In the
+world of cheap APIs, $25 is effectively "infinite" for personal Shortcuts (roughly 10–20 million tokens). * Special
+Ability: Specialist Models. Access to niche models like Upstage (for OCR/Document reading) or StripedHyena. 9.
+Cerebras Cloud * The "Lot": Massive throughput limits. * Special Ability: High-Volume Llama. If you have a
+Shortcut that needs to run every 5 minutes (like a news monitor or price tracker), Cerebras handles that frequency
+better than anyone. 10. Hugging Face Serverless * The "Lot": Free for "Reasonable use" across 100,000+
+models. * Special Ability: The "Anything" API. Want an AI that only summarizes YouTube transcripts? Or one that
+only detects the tone of an email? You can find a tiny, specialized model here and call it for free. How to use these
+in Shortcuts (The "Elite" Method) To never open an app, follow this pattern in the Shortcuts App: * Action:
+Dictionary (Put your API Key and Prompt here). * Action: Get Contents of URL (Set to POST). * URL: Use the API
+endpoint (e.g., https://generativelanguage.googleapis.com/...). * Headers: Add Content-Type: application/json
+and Authorization: Bearer YOUR_KEY. * Action: Get Value from Dictionary (To grab the AI's text from the messy
+JSON response). Would you like me to provide the exact JSON body and URL for the Gemini API (#1) so you can
+paste it into a Shortcut right now?
+Max the hell out of Gemini and the others
+#1)
+1/24/26
+1/22/26, 3 52 AM
+Page 4 of 5Is there a way I can automate Anki cards with AI?
+Look into Apple APIs and others like home assistant and scriptable and mcp
+Highest leverage and coolest NFC tag ideas with nexus systems
+I need to automate everything on my iPhone and Linux pc to with free AI’s to make sure nothing ever gets
+outdated and stays organized
+Top 25 highest leverage things I need to do with ClaudeWeb/Claude code on Linux laptop or iPhone 12
+Top 25 most advantagous secrets and hacks I need to do with ClaudeWeb/Claude code on Linux laptop or iPhone
+12 then optimize answer for deepseek only running claude code
+How to optimize everything on my phone for nexus for maximum performance and maximum aesthetics?
+NEXUS
+34
+Plan all nfc’s then write all the labels below
+ank the top automation 5 most powerful shortcut and automation software, 5 for iOS devices and 5 for Linux pc.
+Only list the names no descriptions. As of 2026 iOS (top 5)ShortcutsIFTTTProcess StreetAutomation Anywhere
+Mobile (Microsoft Power Automate)AutomateMyAppLinux (top 5)AnsiblePuppetWebminNagiosZabbix
+AirPods Pro on Linux bluez-alsa + pipewire + custom scripts
+OpenPods
+remote access from work
+AI COMMAND CENTER
+interfaces (controlling your system)
+Logging systems (tracking agent actions)
+FastAPI (what you’ll use for NEXUS API)
+When you have an idea, quickly log it via Shortcut ∙ Voice memo longer thoughts ∙ Your iPhone is passively
+collecting intel for NEXUS
+On Ubuntu PC: ∙ Piper TTS (local text-to-speech, sounds way better than you’d expect)
+The Brutal Truth You Need Your 8GB RAM laptop + iPhone 12 can absolutely support your NEXUS vision, but not
+all at once running locally. Your optimal architecture is: Local (PC): ∙ Development environment (code-server) ∙
+Database (PostgreSQL - lightweight) ∙ Basic Python scripts ∙ Git repositories Cloud (APIs): ∙ DeepSeek for AI
+reasoning ($0.14/M tokens) ∙ Claude API for complex analysis ($3/M tokens) ∙ n8n cloud for automation (free
+tier)
+Use DeepSeek API instead: $0.14 per million tokens for reasoning, $0.27 for chat. Way cheaper than upgrading
+hardware.
+cron jobs + Python scripts
+“Show Content” can display scrollable lists of calendar events, reminders, and more.
+Power User Shortcuts to Build Linux Server Control Panel 1. Create shortcut with “Run Script over SSH” 2.
+Commands: docker ps, htop, df -h, system restart 3. Add to Home Screen as widget 4. Tap to check server status
+from anywhere (via Tailscale) Ollama Query from iPhone. Your local AI responds to questions triggered from your
+iPhone. Photo Backup Automation 1. Shortcut triggers on “Photos app opened” 2. SSH to Linux: rsync latest
+photos from Immich/Nextcloud 3. Notification: “Backup complete” Network Wake-on-LAN. Turn on your Linux PC
+from bed using your Apple Watch.
+1/22/26, 3 53 AM
+Page 1 of 4iFuse (libimobiledevice) can mount your iPhone’s file system and allow you to write files from Linux. The problem?
+These files won’t show up anywhere useful on the iPhone – not in the Files app, not in Photos, not in any media
+app. Best used for pulling photos/videos OFF the iPhone. KDE Connect (Limited iOS Support) KDE Connect has
+made great strides in Linux-to-Android file transfers, but iOS support is a different story. With the official KDE
+Connect app from the App Store, you’ll find that file transfers are one-way only, and even then, heavily restricted.
+You can pull files from the iPhone to Linux (sometimes), but you can’t push files to the iPhone. Pushcut —
+Webhook Bridge Use it for notifying me of events on Linux server, like a site update deployment. There are myriad
+possibilities. Your Linux server can trigger iOS shortcuts via HTTP webhooks using Pushcut’s API.
+ifuse — Mount iPhone on Linux (USB) Install the ifuse package. You can then run the following command to
+mount your iPhone’s media filesystem. You can use this to access the device’s photos inside mountpoint/DCIM.
+LocalSend — The AirDrop for Everything LocalSend uses your local WiFi network to transfer files. Your data never
+leaves your local network. All transfers are encrypted using HTTPS. LocalSend is available for Windows, macOS,
+Linux, Android, and iOS. No account, no login, no servers. The app works as a cross-platform tool for transferring
+files between devices, offering functionality similar to Apple’s AirDrop but without being limited to a single
+ecosystem. It works across just about every platform out there including Android, iOS, iPad OS, Windows, Mac
+and Linux.
+Webhook Triggers for Remote Automation Execute an iOS shortcut from a HomeKit automation. Convert your
+HomeKit automation into a shortcut and use the Get Contents of URL action to run a ‘real’ shortcut on your iOS
+server. Trigger smart notifications from Shortcuts, HomeKit, schedules, locations, iBeacons, online services (like
+IFTTT, Zapier, Flow, Integromat), home servers, or anywhere that knows what HTTP is. NFC Tag Automation As a
+Shortcuts user I like to automate more stuff to make sure I can switch on or off things in the easiest way possible.
+For that, I needed to use NFC tags and connect some additional lights to Apple Home using the app called
+Homebridge. Buy cheap NFC stickers, program them to trigger shortcuts when you tap your phone against them.
+Raspberry Pi
+SSH to Linux from iPhone
+Program plans for each of my shortcuts
+(IPHONE 12) Double Back tap Triple back tap Triple click power button for assistive touch Hey siri Shortcuts app
+Automations Home Screen shortcuts Lock screen shortcuts Control center shortcuts Apple Watch shortcuts (Linux laptop-
+Ubuntu) My mouse buttons Keyboard (Smart home) Switches or buttons or sensors
+.
+GitOps + Infrastructure as Code Make your server/cluster deployment reproducible. Don’t rely on fancy web UIs but rather
+configuration files. Use Ansible, Terraform, or Flux to define your entire lab in code. 16. K3s Kubernetes (If You Want to Go
+Deep) For container orchestration, the split is clear: Docker Compose for simplicity, K3S for those who want Kubernetes
+without the complexity. 17. Backup Strategy (3-2-1 Rule) Proxmox Backup Server + off-site replication. Your photos, configs,
+and data need protection.
+1/22/26, 3 53 AM
+Page 2 of 4Reverse Proxy + SSL (Caddy/Nginx Proxy Manager) Use a real domain for your services (like
+service.yourname.net) which will allow you to run a cert-manager and issue valid Let’s Encrypt SSL certificates.
+This will save you a lot of headaches. Pi-hole/AdGuard Home — DNS Sinkhole Network-wide ad blocking. Your
+iPhone benefits from this when on home WiFi. Proper Network Segmentation My Pi-hole doesn’t need to be on
+the same machine as my test containers, which also shouldn’t be alongside my NAS in the same VLAN.
+Completely separating experimentation and services I rely on is a good start.
+Nextcloud — File Sync + Productivity Nextcloud remains the productivity backbone for most homelabs, but the
+way people use it has evolved. It’s no longer just file sync.
+How to get all Apple api’s? Where to store all API’s?
+How to master shortcuts like the share sheet and other advanced topics
+iOS 26 Developer Mode — Unlock System Access iOS 26 Developer Mode stands out as the safest and most
+flexible way to install IPA files, access developer settings, and customize your iPhone’s system performance. You
+can safely sideload apps, test beta builds, and use debugging tools without jailbreaking. To enable: Go to Settings
+→ Privacy & Security → Developer Mode, toggle it on, restart your device. Sideloading Methods
+AltStore/Sideloadly (Free Apple ID): Apps need re-signing every 7 days, but tools like AltStore can automate
+iPhone/Watch Widget: Use a Python script to poll the Home Assistant API.
+The iPhone Side (Scriptable) Use the Scriptable app to create custom iOS home screen widgets that show Ubuntu stats. •
+The Workflow: Run a simple FastAPI (Python) script on Ubuntu that listens for requests. Scriptable on your iPhone makes a
+GET request to your laptop’s IP (via Tailscale) to fetch CPU load, RAM usage, and active Hyprland workspace. 4. The 2026
+"OP" Automation Logic • Auto-Lock by Proximity: Set up a script on Ubuntu that pings your iPhone’s IP (via Tailscale). If the
+ping latency exceeds 50ms (meaning you walked away), Hyprland triggers hyprlock automatically. • Apple Watch
+"Terminal": Use the Blink Shell app on your Watch. In 2026, it supports basic "Trigger" buttons. You can restart a stuck
+process on Ubuntu by tapping your wrist. • AirPods Audio-Switch: Use PipeWire's wireplumber on Ubuntu to detect when
+your AirPods connect. Have it automatically switch your default output and send a notification to your iPhone saying
+"Ubuntu Audio Hijacked."
+.
+1. The Core: Performance & Window Management To make Ubuntu feel "OP," you need to bypass the standard GNOME shell
+for Hyprland. • Kernel: Swap the generic kernel for Liquorix or XanMod. • Reason: These are optimized for low-latency
+desktop use and will make Hyprland’s animations and window switching feel instantaneous. • Window Manager: Hyprland
+(Wayland). • On Ubuntu, don't use the standard repos; use the Hyprland-Ubt automated build scripts (popular in 2026) to
+ensure all dependencies are handled. • Status Bar: Waybar. • You’ll use Waybar as your data hub, showing your iPhone and
+Apple Watch battery alongside your CPU/GPU vitals. 2. The Connectivity Bridge (The Glue) To get "Full Control," you need
+to bridge the Apple-Linux divide using two specific tools: A. KDE Connect (iOS + Linux) This is the single most important
+tool for an iPhone-Ubuntu user. • Widgets: You get a "Remote Commands" widget on your iPhone. • Control: Map
+commands like hyprctl dispatch exit (Close Hyprland) or systemctl suspend to buttons on your iPhone and Apple Watch. •
+Clipboard: Copy a bash script on your Ubuntu terminal, paste it directly into your iPhone notes. B. Home Assistant (Self-
+Hosted on Ubuntu) You don't need fancy smart home gear; you are using this to pull Apple Sensors. 1. Install Home
+Assistant in a Docker container on your Ubuntu laptop. 2. Install the Home Assistant Companion App on your iPhone and
+Watch. 3. The Result: Your iPhone will now send its battery %, Focus Mode (Do Not Disturb), and Apple Watch battery %
+directly to your Ubuntu machine via a local API. 3. The Widget Stack: Cross-Device Sync This is what you specifically asked
+for—widgets that talk to each other. The Linux Side (Eww + Waybar) Use Eww (Elkowar’s Wacky Widgets) for a "floating"
+glass dashboard. AirPods Widget: Use AirStatus (Python CLI). It scans BLE beacons to find your AirPods' charge levels
+(Left, Right, Case) and displays them in a clean table or Waybar tooltip.
+1/22/26, 3 53 AM
+Page 3 of 4The Command & Control Workflow
+1. Focus Mode Sync: When you flip your iPhone 12 to "Work" Focus, Home Assistant detects the state change and sends a
+webhook to your Linux machine. Hyprland automatically changes your wallpaper, launches your IDE, and silences
+notifications. 2. Watch Triggers: You can create a "Lock Laptop" button on your Apple Watch. Tapping it sends a command
+via KDE Connect to execute hyprlock. 3. AirPods Auto-Switch: Use a script that detects when your AirPods MAC address
+connects to your phone; it can automatically pause media on Linux or vice-versa using playerctl.
+The Widget Stack
+This is how you get the cross-device battery and status syncing you requested. A. Linux Desktop Widgets (Eww + Waybar)
+Don't just use a bar; use Eww (Elkowar’s Wacky Widgets). It’s written in Rust and allows for highly styled, interactive CSS
+widgets. • iPhone/Watch Battery on Linux: Write a simple bash script that curls the Home Assistant API to get your iPhone
+12's battery level and outputs it to an Eww widget or a Waybar module. • AirPods Battery: In 2026, use pipewire-airpods-
+battery scripts. Since AirPods don't use standard Bluetooth Battery Service, these scripts scan BLE (Bluetooth Low Energy)
+beacons to grab the % of each bud and the case. B. iPhone/Watch Widgets (Scriptable) • Tool: Scriptable (iOS App). • The
+Setup: Write a JavaScript snippet in Scriptable that polls your Linux laptop's status (CPU temp, RAM, Uptime) via an SSH
+command (using Blink Shell integration) or a simple Python http.server. • Result: A native iOS widget on your iPhone 12
+home screen showing your Linux laptop's real-time "vitals."
+Hyprland
+HA 2026 now features Matter 2.0 and Thread native support. It acts as the "Fake HomeKit Bridge" that allows
+your Apple Watch to trigger Linux scripts via Siri without ever touching the cloud.
