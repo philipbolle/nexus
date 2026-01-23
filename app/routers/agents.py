@@ -32,6 +32,8 @@ from ..agents.tools import ToolSystem
 from ..agents.email_intelligence import register_email_agent
 from ..agents.decision_support import register_decision_support_agent
 from ..agents.code_review import register_code_review_agent
+from ..agents.schema_guardian import register_schema_guardian_agent
+from ..agents.test_synchronizer import register_test_synchronizer_agent
 from ..agents.sessions import SessionManager, SessionConfig
 from ..agents.orchestrator import OrchestratorEngine
 from ..agents.memory import MemorySystem
@@ -94,6 +96,20 @@ async def initialize_agent_framework() -> None:
             logger.info("Code review agent registered successfully")
         except Exception as e:
             logger.warning(f"Failed to register code review agent: {e}. System will continue without code review agent.")
+
+        # Register schema guardian agent
+        try:
+            await register_schema_guardian_agent()
+            logger.info("Schema guardian agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register schema guardian agent: {e}. System will continue without schema guardian agent.")
+
+        # Register test synchronizer agent
+        try:
+            await register_test_synchronizer_agent()
+            logger.info("Test synchronizer agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register test synchronizer agent: {e}. System will continue without test synchronizer agent.")
 
         _components_initialized = True
         logger.info("Agent framework components initialized successfully")

@@ -38,12 +38,12 @@
 **🔧 IN PROGRESS / PARTIALLY COMPLETE:**
 - **Documentation Updates**: ✅ Swarm communication layer documented; ✅ Agent framework documentation completed
 - **Test Suite**: Test infrastructure foundation created (pytest), comprehensive suite needed for agent framework and swarm components
-- **Production Readiness**: Error handling, logging, monitoring, backup/recovery (basic backup implemented)
+- **Production Readiness**: ✅ Error handling, logging, monitoring, backup/recovery implemented
 
 **📋 REMAINING WORK (Priority Order):**
 1. **Medium Priority**: ✅ Update documentation with complete agent framework examples (swarm documentation completed) - **COMPLETED**
 2. **Medium Priority**: Create comprehensive test suite covering all components (especially agent framework and swarm)
-3. **Medium Priority**: Implement production readiness features
+3. **Medium Priority**: ✅ Implement production readiness features - **COMPLETED**
 4. **Next Phase**: Create Finance Agent
 5. **Next Phase**: iPhone Quick Expense shortcut
 6. **Next Phase**: Integrate agent framework with existing services
@@ -431,6 +431,194 @@ python scripts/test_api.py --endpoint /sessions
 - **Session Settings**: Configurable message limits, cost tracking, cleanup intervals
 - **Tool System**: Configurable timeouts, retry limits, confirmation requirements
 
+## Production Readiness Features (2026-01-23)
+
+NEXUS now includes comprehensive production readiness features for reliable operation in production environments.
+
+### ✅ **Centralized Logging System** (`app/logging_config.py`)
+- **Structured JSON logging** for production environments
+- **Human-readable console logging** for development
+- **Configurable log levels** (DEBUG, INFO, WARNING, ERROR)
+- **Request/response logging** with timing and context
+- **Error logging** with stack traces and structured context
+- **Log rotation** for file-based logging (10MB files, keep 5 backups)
+
+**Usage:**
+```python
+from app.logging_config import get_logger, log_request, log_response, log_error
+
+logger = get_logger(__name__)
+logger.info("Message with context", extra={"user_id": "123", "action": "login"})
+```
+
+### ✅ **Error Handling Middleware** (`app/middleware/error_handler.py`)
+- **Standardized error responses** with consistent format
+- **Request ID generation** for tracing
+- **Automatic error categorization** (validation, HTTP, internal)
+- **Comprehensive error logging** with context
+- **Production-safe error messages** (don't expose internal details)
+
+**Error Response Format:**
+```json
+{
+  "error": {
+    "code": 422,
+    "type": "validation_error",
+    "message": "Validation error",
+    "timestamp": 1674579600.123,
+    "request_id": "req_123456",
+    "details": {
+      "errors": [
+        {"field": "email", "message": "Invalid email format"}
+      ]
+    }
+  }
+}
+```
+
+### ✅ **Enhanced Health Checks** (`app/routers/health.py`)
+- **Basic health check**: `GET /health`
+- **Detailed health check**: `GET /health/detailed` (individual component status)
+- **Readiness probe**: `GET /ready` (for Kubernetes/container orchestration)
+- **Liveness probe**: `GET /live` (for Kubernetes/container orchestration)
+- **System metrics**: `GET /metrics/system` (CPU, memory, disk, network)
+- **System status**: `GET /status` (all services status)
+
+**Kubernetes Configuration Example:**
+```yaml
+livenessProbe:
+  httpGet:
+    path: /live
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+```
+
+### ✅ **Enhanced Backup System**
+- **Enhanced backup script**: `scripts/backup_nexus_enhanced.sh`
+- **Backup verification**: `--verify` flag to test backup integrity
+- **Automatic cleanup**: `--cleanup` flag with `--max-backups N` (default: 7)
+- **Restore testing**: `scripts/test_restore.sh` to verify backups without restoring
+- **Backup quality scoring**: Automatic assessment of backup completeness
+
+**Usage:**
+```bash
+# Create backup with verification
+./scripts/backup_nexus_enhanced.sh --verify
+
+# Create backup with automatic cleanup (keep last 7 backups)
+./scripts/backup_nexus_enhanced.sh --cleanup --max-backups 7
+
+# Test backup integrity
+./scripts/test_restore.sh [backup_path]
+
+# Get help
+./scripts/backup_nexus_enhanced.sh --help
+```
+
+### ✅ **Monitoring Integration** (`app/monitoring_integration.py`)
+- **Request/response tracking** with performance metrics
+- **Error tracking and alerting** integrated with agent monitoring system
+- **Performance anomaly detection** (slow requests, high error rates)
+- **System health monitoring** (database, services, overall status)
+- **API metrics collection** for monitoring dashboard
+
+### ✅ **Configuration**
+- **Environment-based logging**: JSON format in production, console in development
+- **Configurable log levels**: Set via `LOG_LEVEL` environment variable
+- **File-based logging**: Configure via `LOG_FILE` environment variable
+- **Automatic initialization**: Integrated with FastAPI lifespan events
+
+### ✅ **Testing**
+- **Production readiness test suite**: `scripts/test_production_readiness.py`
+- **Comprehensive validation**: Tests all production readiness features
+- **Automatic report generation**: JSON report with recommendations
+
+**Run tests:**
+```bash
+python scripts/test_production_readiness.py
+```
+
+### **New Dependencies Added**
+- `psutil>=5.9.0` - System metrics collection
+
+### **Files Created/Modified**
+- `app/logging_config.py` - Centralized logging configuration
+- `app/middleware/error_handler.py` - Error handling middleware
+- `app/monitoring_integration.py` - Monitoring system integration
+- `app/routers/health.py` - Enhanced health check endpoints
+- `app/models/schemas.py` - Added new health check models
+- `app/main.py` - Updated to use new logging and monitoring
+- `scripts/backup_nexus_enhanced.sh` - Enhanced backup script
+- `scripts/test_restore.sh` - Backup restore testing script
+- `scripts/test_production_readiness.py` - Production readiness test suite
+- `requirements.txt` - Added psutil dependency
+
+## Automatic Manual Task Logging System
+
+NEXUS now includes an automatic manual task logging system that captures tasks requiring human intervention that cannot be automated by AI agents, even with user approval. When agents, tools, orchestrators, or error handlers encounter scenarios they "cannot do even with approval," they automatically log these tasks to both the database (`manual_tasks` table) and the `philip-tasks` markdown file.
+
+### Key Features
+- **Automatic Detection**: Agents throw `ManualInterventionRequired` exceptions when encountering tasks requiring human intervention
+- **Deduplication**: Content hashing prevents duplicate task creation
+- **Database + File Storage**: Structured storage in PostgreSQL with synchronization to readable markdown
+- **Thread-Safe Operations**: File locking ensures safe concurrent access to markdown file
+- **Error Handler Integration**: Manual intervention exceptions are caught by error middleware and logged automatically
+- **API Endpoints**: RESTful endpoints for viewing, filtering, and completing manual tasks
+
+### Exception Hierarchy
+- `ManualInterventionRequired` (base class)
+- `SecurityInterventionRequired` (secrets, permissions)
+- `ConfigurationInterventionRequired` (.env, API keys)
+- `PhysicalInterventionRequired` (device access)
+- `ApprovalRequired` (explicit approval needed)
+- `PurchaseRequired` (financial transactions)
+- `LegalInterventionRequired` (legal/compliance)
+- `PersonalDecisionRequired` (personal choices)
+- `TechnicalLimitationEncountered` (technical constraints)
+
+### API Endpoints
+- `GET /manual-tasks/` - List manual tasks with filtering
+- `GET /manual-tasks/{task_id}` - Get specific task details
+- `POST /manual-tasks/{task_id}/complete` - Mark task as completed
+- `POST /manual-tasks/sync-markdown` - Force markdown file synchronization
+
+### Database Schema
+Table `manual_tasks` stores task metadata with fields for title, description, category, priority, source system, source ID, context, content hash, status, timestamps, and resolution notes.
+
+### Usage Example
+```python
+from app.exceptions.manual_tasks import ConfigurationInterventionRequired
+
+# When an agent encounters a scenario it cannot handle
+raise ConfigurationInterventionRequired(
+    title="Configure Email App Password",
+    description="Add Gmail app password to .env file for email scanning",
+    source_system="agent:EmailIntelligenceAgent",
+    source_id=agent_id,
+    context={"env_var": "GMAIL_APP_PASSWORD"}
+)
+```
+
+### Files Created/Modified
+- `schema/08_MANUAL_TASKS.sql` - Database schema for manual tasks
+- `app/exceptions/manual_tasks.py` - Exception hierarchy
+- `app/services/manual_task_manager.py` - Core task management service
+- `app/routers/manual_tasks.py` - API endpoints
+- `app/models/schemas.py` - Added manual task schemas
+- `app/agents/base.py` - Agent framework integration
+- `app/agents/tools.py` - Tool system integration
+- `app/middleware/error_handler.py` - Error handler integration
+- `app/main.py` - Added manual tasks router
+- `requirements.txt` - Added `filelock>=3.13.0` dependency
+
 ## Simplified Swarm Communication Layer ("Tiny Swarm")
 
 NEXUS implements a simplified swarm communication layer focused on basic Redis Pub/Sub messaging for agent coordination. Advanced features (RAFT consensus, voting system, event bus) are **DISABLED** to ensure system stability and simplicity.
@@ -620,6 +808,10 @@ Based on comprehensive agent debates, these 7 features would make NEXUS superior
 Core:
 - GET / - Root endpoint (health check redirect)
 - GET /health - Health check
+- GET /health/detailed - Detailed health check with component status
+- GET /ready - Readiness probe (Kubernetes/container orchestration)
+- GET /live - Liveness probe (Kubernetes/container orchestration)
+- GET /metrics/system - System metrics (CPU, memory, disk, network)
 - GET /status - All services status
 - POST /chat - AI chat with semantic caching
 - POST /chat/intelligent - Intelligent chat with context retrieval
@@ -688,6 +880,12 @@ Evolution System:
 - POST /evolution/refactor/code - Apply code refactoring
 - GET /evolution/refactor/history - Refactoring history
 - GET /evolution/status - Evolution system status
+
+**Autonomous Monitoring:**
+- POST /autonomous-monitoring/validate-schema - Trigger schema validation (Schema Guardian Agent)
+- POST /autonomous-monitoring/synchronize-tests - Trigger test synchronization (Test Synchronizer Agent)
+- GET /autonomous-monitoring/monitoring-status - Get autonomous monitoring status
+- POST /autonomous-monitoring/trigger-reactive - Trigger reactive monitoring (internal)
 
 **Swarm & Distributed Tasks:**
 - **Swarm Management**:

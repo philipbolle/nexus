@@ -10,7 +10,7 @@ import logging
 
 from .config import settings
 from .database import db
-from .routers import health, chat, finance, email, agents, evolution, swarm
+from .routers import health, chat, finance, email, agents, evolution, swarm, manual_tasks, autonomous_monitoring
 # from .routers import distributed_tasks  # Disabled for simplification
 from .agents.swarm import initialize_swarm_pubsub, initialize_event_bus, close_swarm_pubsub, close_event_bus
 from .logging_config import setup_logging, get_logger
@@ -111,6 +111,8 @@ app.include_router(email.router)
 app.include_router(agents.router)
 app.include_router(evolution.router)
 app.include_router(swarm.router)
+app.include_router(manual_tasks.router)
+app.include_router(autonomous_monitoring.router)
 # app.include_router(distributed_tasks.router)  # Disabled for simplification
 
 

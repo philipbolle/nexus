@@ -590,6 +590,8 @@ class AgentRegistry:
         from .swarm.agent import SwarmAgent
         from .decision_support import DecisionSupportAgent
         from .code_review import CodeReviewAgent
+        from .schema_guardian import SchemaGuardianAgent
+        from .test_synchronizer import TestSynchronizerAgent
 
         builtin_types = {
             "domain": DomainAgent,
@@ -600,6 +602,8 @@ class AgentRegistry:
             "analyzer": DomainAgent,  # Analysis agents (default to DomainAgent)
             "decision_support": DecisionSupportAgent,
             "code_review": CodeReviewAgent,
+            "schema_guardian": SchemaGuardianAgent,
+            "test_synchronizer": TestSynchronizerAgent,
         }
 
         for type_name, agent_class in builtin_types.items():
