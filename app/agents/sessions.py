@@ -440,51 +440,53 @@ class SessionManager:
             session = self.active_sessions[session_id]
             updates = []
             params = []
-            param_index = 1
+            param_count = 0
 
             if title is not None:
-                updates.append(f"title = ${param_index}")
+                param_count += 1
+                updates.append("title = $" + str(param_count))
                 params.append(title)
                 session["title"] = title
-                param_index += 1
 
             if summary is not None:
-                updates.append(f"summary = ${param_index}")
+                param_count += 1
+                updates.append("summary = $" + str(param_count))
                 params.append(summary)
-                param_index += 1
 
             if status is not None:
-                updates.append(f"status = ${param_index}")
+                param_count += 1
+                updates.append("status = $" + str(param_count))
                 params.append(status.value)
                 session["status"] = status.value
-                param_index += 1
 
                 if status == SessionStatus.COMPLETED:
                     session["ended_at"] = datetime.now()
-                    updates.append(f"ended_at = NOW()")
+                    updates.append("ended_at = NOW()")
 
             if metadata is not None:
                 # Merge with existing metadata
                 current_metadata = session.get("metadata", {})
                 merged_metadata = {**current_metadata, **metadata}
-                updates.append(f"metadata = ${param_index}")
+                param_count += 1
+                updates.append("metadata = $" + str(param_count))
                 params.append(merged_metadata)
                 session["metadata"] = merged_metadata
-                param_index += 1
 
             if not updates:
                 return True  # Nothing to update
 
             # Add session ID as last parameter
+            param_count += 1
+            session_id_param = "$" + str(param_count)
             params.append(session_id)
 
             # Update database
             try:
                 set_clause = ", ".join(updates)
-                await db.execute(
-                    f"UPDATE sessions SET {set_clause}, updated_at = NOW() WHERE id = ${param_index}",
-                    *params
-                )
+                query = "UPDATE sessions SET " + set_clause + ", updated_at = NOW() WHERE id = " + session_id_param
+                logger.debug(f"update_session SQL: {query}")
+                logger.debug(f"update_session params: {params}")
+                await db.execute(query, *params)
 
                 logger.info(f"Updated session {session_id}")
                 return True
@@ -693,34 +695,52 @@ class SessionManager:
             List of session summaries
         """
         try:
+            # Build query parts - use explicit string concatenation to avoid f-string issues
+            where_parts = []
+            params = []
+            param_count = 0
+
+            if status:
+                param_count += 1
+                where_parts.append("status = $" + str(param_count))
+                params.append(status.value)
+
+            if session_type:
+                param_count += 1
+                where_parts.append("session_type = $" + str(param_count))
+                params.append(session_type.value)
+
+            if agent_id:
+                param_count += 1
+                where_parts.append("$" + str(param_count) + " = ANY(agents_involved)")
+                params.append(agent_id)
+
+            # Build WHERE clause
+            where_clause = ""
+            if where_parts:
+                where_clause = "WHERE " + " AND ".join(where_parts)
+
+            # Add pagination parameters
+            param_count += 1
+            limit_param = "$" + str(param_count)
+            param_count += 1
+            offset_param = "$" + str(param_count)
+            params.extend([limit, offset])
+
+            # Construct final query using string concatenation
             query = """
                 SELECT id, session_type, title, summary, primary_agent_id,
                        agents_involved, total_messages, total_tokens,
                        total_cost_usd, status, started_at, last_message_at,
                        ended_at, metadata
                 FROM sessions
-                WHERE 1=1
-            """
-            params = []
-            param_index = 1
+            """ + where_clause + """
+                ORDER BY last_message_at DESC
+                LIMIT """ + limit_param + """ OFFSET """ + offset_param
 
-            if status:
-                query += f" AND status = ${param_index}"
-                params.append(status.value)
-                param_index += 1
-
-            if session_type:
-                query += f" AND session_type = ${param_index}"
-                params.append(session_type.value)
-                param_index += 1
-
-            if agent_id:
-                query += f" AND ${param_index} = ANY(agents_involved)"
-                params.append(agent_id)
-                param_index += 1
-
-            query += f" ORDER BY last_message_at DESC LIMIT ${param_index} OFFSET ${param_index + 1}"
-            params.extend([limit, offset])
+            # Debug logging to see the actual SQL
+            logger.debug(f"list_sessions SQL: {query}")
+            logger.debug(f"list_sessions params: {params}")
 
             rows = await db.fetch_all(query, *params)
 

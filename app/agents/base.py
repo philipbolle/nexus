@@ -21,6 +21,8 @@ from ..config import settings
 from ..services.ai_providers import ai_request, TaskType
 from ..services.semantic_cache import check_cache, store_cache
 from .tools import ToolType
+from ..exceptions.manual_tasks import ManualInterventionRequired
+from ..services.manual_task_manager import manual_task_manager
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +188,41 @@ class BaseAgent(ABC):
                 "agent_name": self.name,
                 "session_id": self.current_session_id,
                 "result": result,
+                "metrics": {
+                    "processing_time_ms": int((datetime.now() - start_time).total_seconds() * 1000),
+                    "agent_status": self.status.value
+                }
+            }
+
+        except ManualInterventionRequired as e:
+            # Set source context for manual task logging
+            e.source_system = f"agent:{self.name}"
+            e.source_id = self.agent_id
+            if context:
+                e.context.update(context)
+            e.context.update({
+                "task": str(task)[:500],  # Truncate long task descriptions
+                "session_id": session_id,
+                "agent_type": self.agent_type.value
+            })
+
+            # Log to manual task system
+            task_id = await manual_task_manager.log_manual_task(e)
+
+            # Don't set error status for manual intervention - agent can continue
+            self.status = AgentStatus.IDLE
+            self._last_activity = datetime.now()
+
+            logger.info(f"Agent {self.name} requires manual intervention: {e.title} (Task ID: {task_id})")
+
+            return {
+                "success": False,
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "error": str(e),
+                "error_type": "manual_intervention_required",
+                "manual_task_id": task_id,
+                "message": f"Task requires manual intervention: {e.title}",
                 "metrics": {
                     "processing_time_ms": int((datetime.now() - start_time).total_seconds() * 1000),
                     "agent_status": self.status.value
@@ -682,10 +719,29 @@ class BaseAgent(ABC):
         return "stored"
 
     async def _request_human_input(self, question: str, options: Optional[List[str]] = None) -> str:
-        """Request input from human user."""
-        # TODO: Integrate with notification system
-        logger.info(f"Human input requested by {self.name}: {question}")
-        return "human_input_requested"
+        """Request input from human user by creating a manual task."""
+        from ..exceptions.manual_tasks import ApprovalRequired
+
+        # Create approval exception
+        exception = ApprovalRequired(
+            description=question,
+            source_system=f"agent:{self.name}",
+            source_id=self.agent_id,
+            context={
+                "options": options or [],
+                "session_id": self.current_session_id,
+                "agent_type": self.agent_type.value,
+                "request_method": "_request_human_input"
+            }
+        )
+
+        # Log as manual task
+        task_id = await manual_task_manager.log_manual_task(exception)
+
+        logger.info(f"Human input requested by {self.name}: {question} (Task ID: {task_id})")
+
+        # Return task ID for tracking
+        return f"manual_task_created:{task_id}"
 
     async def _log_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Log an event to the audit trail."""

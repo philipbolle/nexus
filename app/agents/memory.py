@@ -99,6 +99,7 @@ class MemorySystem:
         self.chroma_client: Optional[chromadb.ClientAPI] = None
         self.chroma_collections: Dict[str, chromadb.Collection] = {}
         self.use_chromadb: bool = True  # Flag to enable/disable ChromaDB
+        self.use_pgvector: bool = True  # Flag to enable/disable pgvector similarity search
 
     async def _init_chromadb_client(self) -> None:
         """Initialize ChromaDB client and create collections."""
@@ -134,6 +135,44 @@ class MemorySystem:
             logger.warning(f"Failed to initialize ChromaDB client: {e}. Falling back to PostgreSQL-only mode.")
             self.use_chromadb = False
             self.chroma_client = None
+
+    async def _check_pgvector(self) -> None:
+        """Check if pgvector extension is available and column is vector type."""
+        try:
+            # Check if pgvector extension is installed
+            row = await db.fetch_one(
+                "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector') AS ext_exists"
+            )
+            ext_exists = row["ext_exists"] if row else False
+
+            if not ext_exists:
+                logger.warning("pgvector extension not installed. Disabling pgvector similarity search.")
+                self.use_pgvector = False
+                return
+
+            # Check if content_embedding column exists and is vector type
+            row = await db.fetch_one(
+                """SELECT data_type
+                FROM information_schema.columns
+                WHERE table_name = 'memories' AND column_name = 'content_embedding'"""
+            )
+            if not row:
+                logger.warning("content_embedding column not found. Disabling pgvector similarity search.")
+                self.use_pgvector = False
+                return
+
+            data_type = row["data_type"]
+            if data_type != "USER-DEFINED":  # vector type shows as USER-DEFINED
+                logger.warning(f"content_embedding column is {data_type}, not vector type. Disabling pgvector similarity search.")
+                self.use_pgvector = False
+                return
+
+            logger.info("pgvector extension and vector column available")
+            self.use_pgvector = True
+
+        except Exception as e:
+            logger.warning(f"Failed to check pgvector availability: {e}. Disabling pgvector similarity search.")
+            self.use_pgvector = False
 
     async def _store_memory_in_chromadb(
         self,
@@ -260,6 +299,8 @@ class MemorySystem:
 
             # Initialize ChromaDB client
             await self._init_chromadb_client()
+            # Check pgvector availability
+            await self._check_pgvector()
 
             # Start background consolidation job
             asyncio.create_task(self._run_consolidation_jobs())
@@ -302,9 +343,11 @@ class MemorySystem:
         """
         memory_id = str(uuid.uuid4())
 
-        # Generate embedding for semantic search
-        embedding = get_embedding(content)
-        embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
+        # Generate embedding for semantic search if needed
+        embedding_list = None
+        if self.use_pgvector or self.use_chromadb:
+            embedding = get_embedding(content)
+            embedding_list = embedding.tolist() if hasattr(embedding, 'tolist') else embedding
 
         logger.debug(f"Storing {memory_type.value} memory for agent {agent_id}: {content[:100]}...")
 
@@ -379,11 +422,58 @@ class MemorySystem:
     async def get_memories(self, agent_id: str, memory_type: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
         """
         Get memories for a specific agent.
+
+        Args:
+            agent_id: Agent ID
+            memory_type: Optional memory type filter
+            limit: Maximum number of memories to return
+
+        Returns:
+            List of memory dictionaries
         """
         try:
-            # TODO: Implement proper memory retrieval
-            logger.warning(f"get_memories called but not fully implemented for agent {agent_id}")
-            return []
+            # Build query
+            sql = """
+                SELECT id, agent_id, memory_type, content, importance_score,
+                       strength_score, last_accessed_at, tags, metadata,
+                       created_at
+                FROM memories
+                WHERE agent_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
+            """
+            params = [agent_id]
+            param_index = 2
+
+            if memory_type:
+                sql += f" AND memory_type = ${param_index}"
+                params.append(memory_type)
+                param_index += 1
+
+            sql += f" ORDER BY created_at DESC, importance_score DESC LIMIT ${param_index}"
+            params.append(limit)
+
+            # Execute query
+            rows = await db.fetch_all(sql, *params)
+
+            # Convert to list of dictionaries
+            memories = []
+            for row in rows:
+                memory_dict = {
+                    "id": row["id"],
+                    "agent_id": row["agent_id"],
+                    "memory_type": row["memory_type"],
+                    "content": row["content"],
+                    "importance_score": float(row["importance_score"]),
+                    "strength_score": float(row["strength_score"]),
+                    "last_accessed_at": row["last_accessed_at"],
+                    "tags": row["tags"],
+                    "metadata": row["metadata"],
+                    "created_at": row["created_at"]
+                }
+                memories.append(memory_dict)
+
+            logger.debug(f"Retrieved {len(memories)} memories for agent {agent_id}")
+            return memories
+
         except Exception as e:
             logger.error(f"Failed to get memories for agent {agent_id}: {e}")
             return []
@@ -403,11 +493,19 @@ class MemorySystem:
             # Convert MemoryResult to dict
             memory_dicts = []
             for result in results:
+                # Safely get memory_type value
+                if hasattr(result.memory_type, 'value'):
+                    memory_type_value = result.memory_type.value
+                else:
+                    # Handle case where memory_type might be a string
+                    memory_type_value = str(result.memory_type)
+                    logger.warning(f"MemoryResult.memory_type is not an enum for memory {result.memory_id}: {memory_type_value}")
+
                 memory_dicts.append({
                     "id": result.memory_id,
                     "agent_id": agent_id,
                     "content": result.content,
-                    "memory_type": result.memory_type.value,
+                    "memory_type": memory_type_value,
                     "similarity": result.similarity,
                     "importance_score": result.importance_score,
                     "strength_score": result.strength_score,
@@ -432,9 +530,11 @@ class MemorySystem:
         """
         logger.debug(f"Searching memories: {query.query_text[:100]}...")
 
-        # Generate embedding for query
-        query_embedding = get_embedding(query.query_text)
-        query_embedding_list = query_embedding.tolist() if hasattr(query_embedding, 'tolist') else query_embedding
+        # Generate embedding for query if needed
+        query_embedding_list = None
+        if self.use_pgvector or self.use_chromadb:
+            query_embedding = get_embedding(query.query_text)
+            query_embedding_list = query_embedding.tolist() if hasattr(query_embedding, 'tolist') else query_embedding
 
         memory_ids_from_chromadb = []
         chromadb_similarities = {}
@@ -493,10 +593,17 @@ class MemorySystem:
                     if not any(tag in memory_tags for tag in query.tags):
                         continue  # Skip memories that don't match tag filter
 
+                # Safely convert memory_type string to enum
+                try:
+                    memory_type_enum = MemoryType(row["memory_type"])
+                except ValueError:
+                    logger.warning(f"Invalid memory type '{row['memory_type']}' for memory {memory_id}, defaulting to SEMANTIC")
+                    memory_type_enum = MemoryType.SEMANTIC
+
                 result = MemoryResult(
                     memory_id=memory_id,
                     content=row["content"],
-                    memory_type=MemoryType(row["memory_type"]),
+                    memory_type=memory_type_enum,
                     similarity=final_score,
                     importance_score=row["importance_score"],
                     strength_score=row["strength_score"],
@@ -570,10 +677,17 @@ class MemorySystem:
                     final_score = (similarity * (1 - query.recency_weight) +
                                   recency_factor * query.recency_weight)
 
+                # Safely convert memory_type string to enum
+                try:
+                    memory_type_enum = MemoryType(row["memory_type"])
+                except ValueError:
+                    logger.warning(f"Invalid memory type '{row['memory_type']}' for memory {memory_id}, defaulting to SEMANTIC")
+                    memory_type_enum = MemoryType.SEMANTIC
+
                 result = MemoryResult(
                     memory_id=memory_id,
                     content=row["content"],
-                    memory_type=MemoryType(row["memory_type"]),
+                    memory_type=memory_type_enum,
                     similarity=final_score,
                     importance_score=row["importance_score"],
                     strength_score=row["strength_score"],

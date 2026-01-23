@@ -19,6 +19,7 @@ from ..database import db
 from .semantic_cache import check_cache, store_cache
 from .intelligent_context import retrieve_intelligent_context, store_conversation
 from ..agents.tools import get_tool_system
+from .conversation_memory import get_conversation_memory_service, ConversationMemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +36,37 @@ async def _get_conversation_context(session_id: Optional[str]) -> str:
     if not session_id:
         return ""
 
-    async with _conversation_lock:
-        history = _conversation_cache.get(session_id)
-        if not history:
+    try:
+        # Get conversation memory service
+        memory_service = await get_conversation_memory_service()
+
+        # Get conversation context (includes recent exchanges and relevant past memories)
+        context = await memory_service.get_conversation_context(session_id)
+
+        if context:
+            logger.debug(f"Retrieved conversation context for session {session_id[:8]}...")
+            return context
+        else:
+            logger.debug(f"No conversation context found for session {session_id[:8]}...")
             return ""
 
-        # Format as "Previous conversation:\n- User: ...\n- AI: ..."
-        formatted = []
-        for i, (user_msg, ai_msg) in enumerate(history, 1):
-            formatted.append(f"{i}. User: {user_msg}")
-            if ai_msg:
-                formatted.append(f"   AI: {ai_msg}")
+    except Exception as e:
+        logger.error(f"Failed to get conversation context: {e}")
+        # Fall back to in-memory cache for backward compatibility
+        async with _conversation_lock:
+            history = _conversation_cache.get(session_id)
+            if not history:
+                return ""
 
-        if formatted:
-            return "Previous conversation:\n" + "\n".join(formatted) + "\n\n"
+            # Format as "Previous conversation:\n- User: ...\n- AI: ..."
+            formatted = []
+            for i, (user_msg, ai_msg) in enumerate(history, 1):
+                formatted.append(f"{i}. User: {user_msg}")
+                if ai_msg:
+                    formatted.append(f"   AI: {ai_msg}")
+
+            if formatted:
+                return "Previous conversation:\n" + "\n".join(formatted) + "\n\n"
         return ""
 
 
@@ -57,12 +75,32 @@ async def _update_conversation(session_id: Optional[str], user_message: str, ai_
     if not session_id:
         return
 
+    # Keep in-memory cache for backward compatibility (max 3 exchanges)
     async with _conversation_lock:
         if session_id not in _conversation_cache:
             _conversation_cache[session_id] = deque(maxlen=MAX_CONVERSATION_HISTORY)
 
         # Store as tuple (user_message, ai_response)
         _conversation_cache[session_id].append((user_message, ai_response))
+
+    # Also store as episodic memory in memory system (persistent, 20+ exchanges)
+    try:
+        memory_service = await get_conversation_memory_service()
+        memory_id = await memory_service.store_chat_exchange(
+            session_id=session_id,
+            user_message=user_message,
+            ai_response=ai_response,
+            metadata={"source": "chat_voice"}
+        )
+
+        if memory_id:
+            logger.debug(f"Stored chat exchange as memory {memory_id[:8]}... for session {session_id[:8]}...")
+        else:
+            logger.warning(f"Failed to store chat exchange as memory for session {session_id[:8]}...")
+
+    except Exception as e:
+        logger.error(f"Failed to store chat exchange in memory system: {e}")
+        # Continue without memory storage - system still works with in-memory cache
 MODEL_COSTS = {
     "llama-3.3-70b-versatile": (0.59, 0.79),
     "llama-3.1-8b-instant": (0.05, 0.08),
@@ -541,6 +579,30 @@ RESPONSE:"""
         )
     except Exception as e:
         logger.error(f"Failed to store conversation: {e}")
+
+    # Step 4.5: Store as episodic memory for long-term memory
+    try:
+        memory_service = await get_conversation_memory_service()
+        memory_id = await memory_service.store_chat_exchange(
+            session_id=session_id,
+            user_message=message,
+            ai_response=response.content,
+            metadata={
+                'context_used': use_context,
+                'context_length': len(context_text) if context_text else 0,
+                'model_used': response.model,
+                'chat_type': 'intelligent'
+            }
+        )
+
+        if memory_id:
+            logger.debug(f"Stored intelligent chat as memory {memory_id[:8]}... for session {session_id[:8]}...")
+        else:
+            logger.debug(f"Intelligent chat memory storage returned no memory ID for session {session_id[:8]}...")
+
+    except Exception as e:
+        logger.error(f"Failed to store intelligent chat as memory: {e}")
+        # Continue without memory storage - system still works
 
     # Update latency to include context retrieval time
     total_latency = int((time.time() - start_time) * 1000)

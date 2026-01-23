@@ -167,7 +167,11 @@ class PerformanceMonitor:
             tags: Additional tags
         """
         # Convert agent_id to valid UUID string
+        original_agent_id = agent_id
         agent_id = self._ensure_uuid(agent_id)
+
+        if original_agent_id != agent_id:
+            logger.debug(f"Converted agent_id '{original_agent_id}' to '{agent_id}' for metric recording")
 
         metric = PerformanceMetric(
             agent_id=agent_id,
@@ -825,6 +829,11 @@ class PerformanceMonitor:
 
     def _ensure_uuid(self, agent_id: str) -> str:
         """Convert agent_id to valid UUID string, handling special 'system' value."""
+        # Handle None or empty string
+        if not agent_id:
+            logger.warning(f"Empty agent_id provided, using SYSTEM_AGENT_ID")
+            return SYSTEM_AGENT_ID
+
         # Handle UUID objects
         if isinstance(agent_id, UUID):
             return str(agent_id)
@@ -840,7 +849,9 @@ class PerformanceMonitor:
         except ValueError:
             # Generate deterministic UUID from string
             import uuid
-            return str(uuid.uuid5(uuid.NAMESPACE_DNS, agent_id))
+            deterministic_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, agent_id))
+            logger.debug(f"Converted agent_id '{agent_id}' to UUID '{deterministic_uuid}'")
+            return deterministic_uuid
 
     async def _flush_metrics_buffer(self) -> None:
         """Flush metrics buffer to database."""

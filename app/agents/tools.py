@@ -17,6 +17,8 @@ import uuid
 from datetime import datetime
 
 from ..database import db
+from ..exceptions.manual_tasks import ManualInterventionRequired
+from ..services.manual_task_manager import manual_task_manager
 
 # Optional web search import
 try:
@@ -231,6 +233,40 @@ class ToolSystem:
                 tool_name, agent_id, session_id, parameters, error_msg, False
             )
             raise ToolExecutionError(tool_name, error_msg)
+
+        except ManualInterventionRequired as e:
+            # Set source context for manual task logging
+            e.source_system = f"tool:{tool_name}"
+            e.source_id = agent_id
+            e.context.update({
+                "parameters": parameters,
+                "session_id": session_id,
+                "execution_id": execution_id
+            })
+
+            # Log to manual task system
+            task_id = await manual_task_manager.log_manual_task(e)
+
+            # Update execution record with manual intervention status
+            await self._update_execution_record(
+                execution_id,
+                ToolExecutionStatus.NEEDS_CONFIRMATION,
+                {"manual_task_id": task_id, "reason": str(e)}
+            )
+
+            # Log tool execution
+            await self._log_tool_execution(
+                tool_name, agent_id, session_id, parameters,
+                f"Manual intervention required: {e.title} (Task ID: {task_id})",
+                False
+            )
+
+            # Raise ToolExecutionError with manual task context
+            raise ToolExecutionError(
+                tool_name,
+                f"Tool requires manual intervention: {e.title}",
+                {"manual_task_id": task_id}
+            )
 
         except Exception as e:
             error_msg = str(e)

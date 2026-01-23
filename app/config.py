@@ -6,6 +6,7 @@ Load settings from environment using pydantic-settings.
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from functools import lru_cache
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -59,6 +60,7 @@ class Settings(BaseSettings):
     # Network
     tailscale_ip: str = Field(default="100.68.201.55")
     api_port: int = Field(default=8080)
+    cors_origins: List[str] = Field(default=["http://localhost:8080", "http://100.68.201.55:8080"], alias="CORS_ORIGINS")
 
     # Cost limits
     daily_budget_usd: float = Field(default=1.0)

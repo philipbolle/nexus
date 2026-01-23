@@ -45,3 +45,9 @@ celery>=5.3.0
 
 # Web search capabilities
 duckduckgo-search>=3.9.0
+
+# System monitoring
+psutil>=5.9.0
+
+# File locking for manual task synchronization
+filelock>=3.13.0

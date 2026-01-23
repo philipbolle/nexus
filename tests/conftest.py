@@ -26,3 +26,7 @@ def mock_ai_response():
         "latency_ms": 50,
         "cached": False
     }
+
+
+# Import fixtures from fixtures module
+from tests.fixtures import *

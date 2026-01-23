@@ -105,6 +105,38 @@ class StatusResponse(BaseModel):
     uptime_seconds: Optional[float] = None
 
 
+class HealthCheckResult(BaseModel):
+    """Individual health check result."""
+    component: str
+    status: str  # "healthy", "unhealthy", "degraded"
+    latency_ms: float
+    details: Optional[dict] = None
+
+
+class ReadinessResponse(BaseModel):
+    """Readiness probe response."""
+    status: str  # "ready" or "not_ready"
+    timestamp: datetime
+    checks: List[HealthCheckResult]
+
+
+class LivenessResponse(BaseModel):
+    """Liveness probe response."""
+    status: str  # "alive" or "dead"
+    timestamp: datetime
+    uptime_seconds: float
+
+
+class SystemMetricsResponse(BaseModel):
+    """System metrics response."""
+    timestamp: datetime
+    cpu: dict
+    memory: dict
+    disk: dict
+    network: dict
+    process: dict
+
+
 # ============ API Usage Models ============
 
 class APIUsageLog(BaseModel):
@@ -299,3 +331,54 @@ class SwarmEventResponse(BaseModel):
     is_global: bool
     occurred_at: datetime
     created_at: datetime
+
+
+# ============ Manual Task Models ============
+
+class ManualTaskBase(BaseModel):
+    """Base manual task model."""
+    title: str = Field(..., min_length=1, max_length=500)
+    description: str = Field(..., min_length=1)
+    category: str = Field(..., pattern="^(security|configuration|purchase|approval|physical|legal|personal|technical|general)$")
+    priority: str = Field(default="medium", pattern="^(low|medium|high|critical)$")
+    source_system: str = Field(..., min_length=1, max_length=100)
+    source_id: Optional[UUID] = None
+    source_context: Optional[dict] = Field(default_factory=dict)
+    assigned_to: Optional[str] = Field(None, max_length=100)
+    due_date: Optional[date] = None
+    resolution_notes: Optional[str] = None
+
+
+class ManualTaskCreate(ManualTaskBase):
+    """Create manual task request."""
+    # Content hash is auto-generated, status defaults to pending
+    pass
+
+
+class ManualTaskUpdate(BaseModel):
+    """Update manual task request."""
+    status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|cancelled)$")
+    assigned_to: Optional[str] = Field(None, max_length=100)
+    due_date: Optional[date] = None
+    resolution_notes: Optional[str] = None
+
+
+class ManualTaskResponse(ManualTaskBase):
+    """Manual task response."""
+    id: UUID
+    content_hash: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime]
+
+    class Config:
+        extra = "ignore"
+
+
+class ManualTaskList(BaseModel):
+    """List of manual tasks."""
+    tasks: List[ManualTaskResponse]
+    total: int
+    pending_count: int
+    completed_count: int

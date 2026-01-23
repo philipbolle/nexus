@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from ..database import db
 from .embeddings import get_embedding, cosine_similarity
 from .semantic_cache import check_cache, store_cache
+from .conversation_memory import get_conversation_memory_service
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,15 @@ class RetrievedContext:
                 role = msg.get('role', 'unknown')
                 content = msg.get('content', '')[:100]
                 sections.append(f"{role.upper()}: {content}...")
+
+        if self.memory_data and len(self.memory_data) > 0:
+            sections.append("RELEVANT PAST CONVERSATIONS:")
+            for memory in self.memory_data[:3]:
+                role = memory.get('role', 'unknown')
+                content = memory.get('content', '')[:100]
+                similarity = memory.get('similarity', 0)
+                similarity_str = f" ({similarity:.0%} relevant)" if similarity > 0 else ""
+                sections.append(f"{role.upper()}: {content}...{similarity_str}")
 
         if self.usage_data and len(self.usage_data) > 0:
             sections.append("USAGE STATISTICS:")
@@ -532,6 +542,64 @@ async def retrieve_conversation_history(session_id: Optional[str] = None, limit:
         return []
 
 
+async def retrieve_memory_data(query: str, session_id: Optional[str] = None, limit: int = 5) -> List[Dict]:
+    """Retrieve relevant past conversations from memory system."""
+    try:
+        memory_service = await get_conversation_memory_service()
+        memories = await memory_service.retrieve_relevant_memories(
+            query=query,
+            session_id=session_id,
+            limit=limit
+        )
+
+        if not memories:
+            return []
+
+        # Format memories for consistency with other retrieval functions
+        formatted = []
+        for memory in memories:
+            metadata = memory.metadata or {}
+            memory_session_id = metadata.get("session_id", "unknown")
+            timestamp = metadata.get("timestamp", "")
+
+            # Parse content which is "User: ...\nNEXUS: ..."
+            content = memory.content
+            # Extract user message (first line after "User: ")
+            user_msg = ""
+            ai_msg = ""
+            if "\nNEXUS: " in content:
+                user_part, ai_part = content.split("\nNEXUS: ", 1)
+                user_msg = user_part.replace("User: ", "", 1)
+                ai_msg = ai_part
+            elif content.startswith("User: "):
+                user_msg = content.replace("User: ", "", 1)
+
+            formatted.append({
+                "role": "user",
+                "content": user_msg,
+                "created_at": timestamp,
+                "session_id": memory_session_id,
+                "memory_id": memory.memory_id,
+                "similarity": memory.similarity
+            })
+
+            if ai_msg:
+                formatted.append({
+                    "role": "assistant",
+                    "content": ai_msg,
+                    "created_at": timestamp,
+                    "session_id": memory_session_id,
+                    "memory_id": memory.memory_id,
+                    "similarity": memory.similarity
+                })
+
+        return formatted
+
+    except Exception as e:
+        logger.error(f"Memory data retrieval failed: {e}")
+        return []
+
+
 # ============================================================================
 # Main Context Retrieval Function
 # ============================================================================
@@ -593,6 +661,7 @@ async def retrieve_intelligent_context(
     system_data = []
     database_data = []
     conversation_data = []
+    memory_data = []
 
     try:
         # Run retrievals concurrently
@@ -614,6 +683,8 @@ async def retrieve_intelligent_context(
 
             # Always retrieve conversation history
             tasks.append(retrieve_conversation_history(session_id))
+            # Always retrieve relevant memories
+            tasks.append(retrieve_memory_data(query, session_id))
 
             # Wait for all tasks
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -650,10 +721,26 @@ async def retrieve_intelligent_context(
                     errors.append(f"Database retrieval: {results[result_idx]}")
                 result_idx += 1
 
-            # Conversation history is always last
-            conversation_data = results[-1] if not isinstance(results[-1], Exception) else []
-            if isinstance(results[-1], Exception):
-                errors.append(f"Conversation retrieval: {results[-1]}")
+            # Conversation history is second to last, memory data is last
+            # Ensure we have enough results (could be fewer due to timeout)
+            if len(results) >= 2:
+                conversation_data = results[-2] if not isinstance(results[-2], Exception) else []
+                if isinstance(results[-2], Exception):
+                    errors.append(f"Conversation retrieval: {results[-2]}")
+
+                memory_data = results[-1] if not isinstance(results[-1], Exception) else []
+                if isinstance(results[-1], Exception):
+                    errors.append(f"Memory retrieval: {results[-1]}")
+            elif len(results) == 1:
+                # Only conversation history returned (memory retrieval timed out)
+                conversation_data = results[-1] if not isinstance(results[-1], Exception) else []
+                if isinstance(results[-1], Exception):
+                    errors.append(f"Conversation retrieval: {results[-1]}")
+                memory_data = []
+            else:
+                # No results (shouldn't happen)
+                conversation_data = []
+                memory_data = []
 
     except asyncio.TimeoutError:
         errors.append(f"Data retrieval timeout after {timeout_seconds} seconds")
@@ -689,7 +776,7 @@ async def retrieve_intelligent_context(
     logger.info(f"Context retrieval completed in {elapsed:.2f}s. Retrieved: "
                 f"finance({len(finance_data)}), email({len(email_data)}), "
                 f"agents({len(agent_data)}), system({len(system_data)}), "
-                f"database({len(database_data)}), conversation({len(conversation_data)})")
+                f"database({len(database_data)}), memory({len(memory_data)}), conversation({len(conversation_data)})")
 
     return RetrievedContext(
         finance_data=finance_data,
@@ -697,6 +784,7 @@ async def retrieve_intelligent_context(
         agent_data=agent_data,
         system_data=system_data,
         database_data=database_data,
+        memory_data=memory_data,
         conversation_history=conversation_data,
         usage_data=usage_data,
         errors=errors
