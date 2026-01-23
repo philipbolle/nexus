@@ -62,6 +62,7 @@ class BaseAgent(ABC):
         description: str = "",
         system_prompt: str = "",
         capabilities: Optional[List[str]] = None,
+        domain: Optional[str] = None,
         supervisor_id: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None
     ):
@@ -75,6 +76,7 @@ class BaseAgent(ABC):
             description: Human-readable description
             system_prompt: Default system prompt for this agent
             capabilities: List of capability strings
+            domain: Domain specialization (finance, health, email, etc.)
             supervisor_id: ID of supervising agent
             config: Agent-specific configuration
         """
@@ -84,6 +86,7 @@ class BaseAgent(ABC):
         self.description = description
         self.system_prompt = system_prompt
         self.capabilities = capabilities or []
+        self.domain = domain
         self.supervisor_id = str(supervisor_id) if supervisor_id else None
         self.config = config or {}
 
@@ -763,7 +766,7 @@ class DomainAgent(BaseAgent):
     Extends BaseAgent with domain-specific knowledge and tools.
     """
 
-    def __init__(self, domain: str, **kwargs):
+    def __init__(self, domain: Optional[str] = None, **kwargs):
         """
         Initialize a domain agent.
 
@@ -771,9 +774,15 @@ class DomainAgent(BaseAgent):
             domain: Domain specialization (finance, health, email, etc.)
             **kwargs: Additional BaseAgent arguments
         """
-        self.domain = domain
+        # Extract domain from kwargs if not provided as positional argument
+        if domain is None and "domain" in kwargs:
+            domain = kwargs.pop("domain")
+
+        if domain is None:
+            domain = "general"
+
         kwargs["agent_type"] = AgentType.DOMAIN
-        super().__init__(**kwargs)
+        super().__init__(domain=domain, **kwargs)
 
     async def _on_initialize(self) -> None:
         """Domain-specific initialization."""

@@ -83,6 +83,17 @@ ALTER TABLE agents ALTER COLUMN config TYPE JSONB USING config::jsonb;
 3. **Create prioritized bug list** - Based on severity and impact
 4. **Develop fix plan** - Weekend implementation schedule
 
+## Resolution (2026-01-22)
+- **Root Cause**: asyncpg was not properly decoding JSONB columns to Python dicts/lists due to missing type codec configuration
+- **Fix**: Added JSONB type codec registration in database connection pool initialization
+  - Modified `/home/philip/nexus/app/database.py` to register `jsonb` and `json` codecs using `json.dumps` and `json.loads`
+  - Modified `/home/philip/nexus/app/services/database.py` for consistency
+- **Result**: FastAPI service now starts successfully, agent endpoints return proper dict `config` fields
+- **Verification**:
+  - API service starts without Pydantic validation errors
+  - `/agents` endpoint returns `config` as JSON objects instead of strings
+  - All connectivity tests pass
+
 ## Notes
 - System otherwise healthy (containers, database, Redis)
 - 191 uncommitted changes - risk of losing work

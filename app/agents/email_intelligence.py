@@ -110,6 +110,8 @@ class EmailIntelligenceAgent(BaseAgent):
         domain = kwargs.pop("domain", None)
         if domain:
             config["domain"] = domain
+        else:
+            domain = "email"  # Default domain for email intelligence agent
 
         # Merge any config provided in kwargs
         kwargs_config = kwargs.pop("config", None)
@@ -127,6 +129,7 @@ class EmailIntelligenceAgent(BaseAgent):
             description=description,
             system_prompt=system_prompt,
             capabilities=capabilities,
+            domain=domain,
             supervisor_id=supervisor_id,
             config=config,
             **kwargs

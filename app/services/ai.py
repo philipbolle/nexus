@@ -344,7 +344,7 @@ async def detect_and_execute_tools(message: str, agent_id: Optional[UUID] = None
     Returns formatted string with tool execution results to include in context.
     """
     tool_results = []
-    tool_system = get_tool_system()
+    tool_system = await get_tool_system()
 
     # Initialize tool system if needed
     if not tool_system._initialized:

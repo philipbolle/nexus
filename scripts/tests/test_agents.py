@@ -51,7 +51,7 @@ async def test_tool_creation():
         "name": "test_tool",
         "display_name": "Test Tool",
         "description": "A test tool for validation",
-        "tool_type": "other",
+        "tool_type": "analysis",
         "input_schema": {
             "type": "object",
             "properties": {

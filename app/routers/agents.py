@@ -162,7 +162,7 @@ async def _agent_to_response(agent: "BaseAgent") -> AgentResponse:
             capabilities=agent_data["capabilities"] or [],
             domain=agent_data["domain"],
             supervisor_id=agent_data["supervisor_id"],
-            config=json.loads(agent_data["config"]) if isinstance(agent_data.get("config"), str) else (agent_data.get("config") or {}),
+            config=normalize_config(agent_data.get("config")),
             status=agent.status,
             metrics=agent.metrics,
             created_at=agent_data["created_at"],
@@ -497,7 +497,7 @@ async def create_session(
         return SessionResponse(
             id=UUID(session_dict["id"]),
             title=session_dict["title"],
-            session_type=session_dict["type"],
+            session_type=session_dict["session_type"],
             summary=session_dict.get("summary", ""),
             primary_agent_id=UUID(session_dict["primary_agent_id"]) if session_dict["primary_agent_id"] else None,
             agents_involved=[UUID(agent_id) for agent_id in session_dict["agents_involved"]],
@@ -505,8 +505,8 @@ async def create_session(
             total_tokens=session_dict.get("total_tokens", 0),
             total_cost_usd=Decimal(str(session_dict.get("total_cost_usd", 0.0))),
             status=session_dict["status"],
-            started_at=session_dict["created_at"],
-            last_message_at=session_dict.get("last_message_at", session_dict["created_at"]),
+            started_at=session_dict["started_at"],
+            last_message_at=session_dict.get("last_message_at", session_dict["started_at"]),
             ended_at=None,
             metadata=session_dict.get("metadata", {})
         )
@@ -818,7 +818,7 @@ async def store_memory(
     """Store a new memory for an agent."""
     try:
         content = memory_data.get("content", "")
-        memory_type_str = memory_data.get("type", "observation")
+        memory_type_str = memory_data.get("type", "semantic")
         metadata = memory_data.get("metadata", {})
         # Convert string to MemoryType enum
         try:
@@ -826,6 +826,7 @@ async def store_memory(
             memory_type = MemoryType(memory_type_str)
         except ValueError:
             # Default to SEMANTIC if invalid
+            logger.warning(f"Invalid memory type '{memory_type_str}', defaulting to SEMANTIC")
             memory_type = MemoryType.SEMANTIC
 
         memory_id = await memory_sys.store_memory(

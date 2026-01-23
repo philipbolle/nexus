@@ -221,7 +221,7 @@ class AgentFrameworkProgress:
             "name": f"progress_tool_{datetime.now().strftime('%H%M%S')}",
             "display_name": "Progress Test Tool",
             "description": "Tool for progress testing",
-            "tool_type": "utility",  # This might need adjustment based on actual valid values
+            "tool_type": "analysis",  # Valid values: database, api, file, calculation, notification, automation, analysis, python_function, web_search
             "input_schema": {"type": "object"},
             "output_schema": {"type": "object"},
             "requires_confirmation": False

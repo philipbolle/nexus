@@ -179,7 +179,7 @@ def main():
         "name": f"test_tool_{datetime.now().strftime('%H%M%S')}",
         "display_name": "Test Tool",
         "description": "A test tool",
-        "tool_type": "utility",
+        "tool_type": "analysis",
         "input_schema": {"type": "object", "properties": {"input": {"type": "string"}}},
         "output_schema": {"type": "object", "properties": {"result": {"type": "string"}}},
         "requires_confirmation": False

@@ -108,7 +108,7 @@ def main():
         "name": f"test_tool_{datetime.now().strftime('%H%M%S')}",
         "display_name": "Test Tool",
         "description": "A test tool",
-        "tool_type": "utility",  # This might be wrong - need to check valid values
+        "tool_type": "analysis",  # Valid values: database, api, file, calculation, notification, automation, analysis, python_function, web_search
         "input_schema": {"type": "object"},
         "output_schema": {"type": "object"},
         "requires_confirmation": False
