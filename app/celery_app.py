@@ -67,6 +67,14 @@ app.conf.update(
             "task": "app.celery_tasks.system_tasks.check_leader_election",
             "schedule": 10.0,  # Every 10 seconds
         },
+        "scheduled-schema-validation": {
+            "task": "app.celery_tasks.system_tasks.run_scheduled_schema_validation",
+            "schedule": 604800.0,  # 7 days in seconds (weekly)
+        },
+        "scheduled-test-synchronization": {
+            "task": "app.celery_tasks.system_tasks.run_scheduled_test_synchronization",
+            "schedule": 86400.0,  # 1 day in seconds (daily)
+        },
     },
 
     # Result expiration

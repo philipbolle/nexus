@@ -269,38 +269,127 @@ async def trigger_reactive_monitoring(
 
     logger.info(f"Reactive monitoring triggered: {event_type} - {event_data}")
 
-    # Example logic for different event types
-    if event_type == "test_failures":
-        failure_rate = event_data.get("failure_rate", 0)
-        if failure_rate > 50:  # 50% failure threshold
-            # Trigger test synchronizer agent
-            test_agent = await registry.get_agent_by_name("Test Synchronizer Agent")
-            if test_agent:
-                background_tasks.add_task(
-                    test_agent.run_synchronization_pipeline,
-                    test_file=event_data.get("test_file")
-                )
+    try:
+        # Record monitoring metric
+        await performance_monitor.record_metric(
+            agent_id="autonomous_monitoring",
+            metric_type="reactive_trigger",
+            value=1.0,
+            tags={
+                "event_type": event_type,
+                "severity": event_data.get("severity", "medium"),
+                "source": event_data.get("source", "unknown")
+            }
+        )
+
+        # Event type routing with severity thresholds
+        if event_type == "test_failures":
+            failure_rate = event_data.get("failure_rate", 0)
+            severity = event_data.get("severity", "high" if failure_rate > 50 else "medium")
+
+            if failure_rate > 50:  # 50% failure threshold
+                # Trigger test synchronizer agent
+                test_agent = await registry.get_agent_by_name("Test Synchronizer Agent")
+                if test_agent:
+                    background_tasks.add_task(
+                        test_agent.run_synchronization_pipeline,
+                        test_file=event_data.get("test_file")
+                    )
+                    return {
+                        "status": "triggered",
+                        "agent": "test_synchronizer",
+                        "reason": f"High test failure rate: {failure_rate}%",
+                        "severity": severity,
+                        "action": "test_synchronization_triggered"
+                    }
+
+        elif event_type == "jsonb_errors":
+            severity = event_data.get("severity", "high")
+            error_count = event_data.get("error_count", 1)
+
+            if error_count > 0:
+                # Trigger schema guardian agent
+                schema_agent = await registry.get_agent_by_name("Schema Guardian Agent")
+                if schema_agent:
+                    background_tasks.add_task(
+                        schema_agent.run_validation_pipeline
+                    )
+                    return {
+                        "status": "triggered",
+                        "agent": "schema_guardian",
+                        "reason": f"JSONB serialization errors detected (count: {error_count})",
+                        "severity": severity,
+                        "action": "schema_validation_triggered"
+                    }
+
+        elif event_type == "schema_mismatch":
+            severity = event_data.get("severity", "medium")
+            mismatch_count = event_data.get("mismatch_count", 0)
+
+            if mismatch_count > 0:
+                # Trigger schema guardian agent
+                schema_agent = await registry.get_agent_by_name("Schema Guardian Agent")
+                if schema_agent:
+                    background_tasks.add_task(
+                        schema_agent.validate_database_schema,
+                        check_jsonb=True,
+                        check_types=True,
+                        check_constraints=False
+                    )
+                    return {
+                        "status": "triggered",
+                        "agent": "schema_guardian",
+                        "reason": f"Schema mismatches detected (count: {mismatch_count})",
+                        "severity": severity,
+                        "action": "schema_validation_triggered"
+                    }
+
+        elif event_type == "performance_anomaly":
+            severity = event_data.get("severity", "medium")
+            metric = event_data.get("metric", "")
+            value = event_data.get("value", 0)
+            threshold = event_data.get("threshold", 0)
+
+            if value > threshold:
+                # Log anomaly for investigation
+                logger.warning(f"Performance anomaly detected: {metric} = {value} > {threshold}")
                 return {
-                    "status": "triggered",
-                    "agent": "test_synchronizer",
-                    "reason": f"High test failure rate: {failure_rate}%"
+                    "status": "logged",
+                    "agent": "monitoring_system",
+                    "reason": f"Performance anomaly: {metric} = {value} > {threshold}",
+                    "severity": severity,
+                    "action": "anomaly_logged"
                 }
 
-    elif event_type == "jsonb_errors":
-        # Trigger schema guardian agent
-        schema_agent = await registry.get_agent_by_name("Schema Guardian Agent")
-        if schema_agent:
-            background_tasks.add_task(
-                schema_agent.run_validation_pipeline
-            )
-            return {
-                "status": "triggered",
-                "agent": "schema_guardian",
-                "reason": "JSONB serialization errors detected"
-            }
+        elif event_type == "high_error_rate":
+            severity = event_data.get("severity", "high")
+            error_rate = event_data.get("error_rate", 0)
+            service = event_data.get("service", "unknown")
 
-    return {
-        "status": "monitored",
-        "message": f"Event '{event_type}' was logged but no immediate action required",
-        "event_data": event_data
-    }
+            if error_rate > 10:  # 10% error rate threshold
+                logger.error(f"High error rate detected for {service}: {error_rate}%")
+                # Could trigger diagnostic agent in future
+                return {
+                    "status": "alerted",
+                    "agent": "monitoring_system",
+                    "reason": f"High error rate for {service}: {error_rate}%",
+                    "severity": severity,
+                    "action": "error_rate_alert"
+                }
+
+        # Default response for unhandled or low-severity events
+        return {
+            "status": "monitored",
+            "message": f"Event '{event_type}' was logged but no immediate action required",
+            "event_data": event_data,
+            "severity": event_data.get("severity", "low")
+        }
+
+    except Exception as e:
+        logger.error(f"Error in reactive monitoring: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": f"Failed to process reactive monitoring event: {str(e)}",
+            "event_type": event_type,
+            "error": str(e)
+        }

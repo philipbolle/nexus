@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 
 from ..database import db
 from ..config import settings
+from ..agents.registry import registry
+from ..agents.monitoring import performance_monitor
 
 
 @current_app.task(bind=True, base=current_app.Task)
@@ -484,4 +486,108 @@ def collect_performance_metrics(self) -> Dict[str, Any]:
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat(),
             "status": "error"
+        }
+
+
+@current_app.task(bind=True, base=current_app.Task)
+def run_scheduled_schema_validation(self) -> Dict[str, Any]:
+    """
+    Run scheduled schema validation (weekly).
+
+    Returns:
+        Validation results
+    """
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Get schema guardian agent
+        schema_agent = loop.run_until_complete(registry.get_agent_by_name("Schema Guardian Agent"))
+        if not schema_agent:
+            return {
+                "status": "skipped",
+                "reason": "Schema Guardian Agent not registered",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+        # Run validation pipeline
+        results = loop.run_until_complete(schema_agent.run_validation_pipeline())
+
+        # Record metric
+        loop.run_until_complete(performance_monitor.record_metric(
+            agent_id=schema_agent.agent_id,
+            metric_type="scheduled_validation",
+            value=1.0,
+            tags={
+                "validation_type": "schema",
+                "schedule": "weekly",
+                "issues_found": len(results.get("issues", [])) if isinstance(results, dict) else 0
+            }
+        ))
+
+        return {
+            "status": "success",
+            "agent_id": schema_agent.agent_id,
+            "results": results,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        print(f"Scheduled schema validation failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
+@current_app.task(bind=True, base=current_app.Task)
+def run_scheduled_test_synchronization(self) -> Dict[str, Any]:
+    """
+    Run scheduled test synchronization (daily).
+
+    Returns:
+        Synchronization results
+    """
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Get test synchronizer agent
+        test_agent = loop.run_until_complete(registry.get_agent_by_name("Test Synchronizer Agent"))
+        if not test_agent:
+            return {
+                "status": "skipped",
+                "reason": "Test Synchronizer Agent not registered",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+        # Run synchronization pipeline
+        results = loop.run_until_complete(test_agent.run_synchronization_pipeline())
+
+        # Record metric
+        loop.run_until_complete(performance_monitor.record_metric(
+            agent_id=test_agent.agent_id,
+            metric_type="scheduled_validation",
+            value=1.0,
+            tags={
+                "validation_type": "test_synchronization",
+                "schedule": "daily",
+                "mismatches_found": results.get("corrections_needed", 0)
+            }
+        ))
+
+        return {
+            "status": "success",
+            "agent_id": test_agent.agent_id,
+            "results": results,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        print(f"Scheduled test synchronization failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
         }
