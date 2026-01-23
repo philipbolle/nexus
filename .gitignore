@@ -37,6 +37,7 @@ Thumbs.db
 *.tmp
 *.log
 *.bak
+*.lock
 
 # NEXUS specific
 *.mp3

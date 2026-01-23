@@ -13,6 +13,7 @@ from uuid import UUID
 
 from ..config import settings
 from ..database import db
+from ..exceptions.manual_tasks import ConfigurationInterventionRequired
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,12 @@ async def call_groq(prompt: str, system: str = "", agent_id: Optional[UUID] = No
     """Call Groq API."""
     api_key = settings.groq_api_key
     if not api_key:
-        raise ValueError("GROQ_API_KEY not configured")
+        raise ConfigurationInterventionRequired(
+            title="Configure Groq API Key",
+            description="GROQ_API_KEY environment variable not configured. Add Groq API key to .env file for AI processing.",
+            source_system="service:ai_providers",
+            context={"provider": "groq", "missing_env_var": "GROQ_API_KEY"}
+        )
 
     messages = []
     if system:
@@ -176,7 +182,12 @@ async def call_google(prompt: str, system: str = "", agent_id: Optional[UUID] = 
     """Call Google Gemini API."""
     api_key = settings.google_ai_api_key
     if not api_key:
-        raise ValueError("GOOGLE_AI_API_KEY not configured")
+        raise ConfigurationInterventionRequired(
+            title="Configure Google AI API Key",
+            description="GOOGLE_AI_API_KEY environment variable not configured. Add Google AI API key to .env file for AI processing.",
+            source_system="service:ai_providers",
+            context={"provider": "google", "missing_env_var": "GOOGLE_AI_API_KEY"}
+        )
 
     full_prompt = f"{system}\n\n{prompt}" if system else prompt
 
@@ -207,7 +218,12 @@ async def call_openrouter(prompt: str, system: str = "", agent_id: Optional[UUID
     """Call OpenRouter API."""
     api_key = settings.openrouter_api_key
     if not api_key:
-        raise ValueError("OPENROUTER_API_KEY not configured")
+        raise ConfigurationInterventionRequired(
+            title="Configure OpenRouter API Key",
+            description="OPENROUTER_API_KEY environment variable not configured. Add OpenRouter API key to .env file for AI processing.",
+            source_system="service:ai_providers",
+            context={"provider": "openrouter", "missing_env_var": "OPENROUTER_API_KEY"}
+        )
 
     messages = []
     if system:
@@ -265,7 +281,26 @@ async def ai_request(
     provider = preferred_provider or await select_provider(task_type)
 
     if not provider:
-        raise RuntimeError("No AI providers available (all at limit or not configured)")
+        # Determine why no provider is available
+        providers_with_keys = [p for p in PROVIDERS.keys() if get_api_key(p)]
+        if not providers_with_keys:
+            raise ConfigurationInterventionRequired(
+                title="Configure AI Provider API Keys",
+                description="No AI provider API keys configured. Add at least one API key (Groq, Google, or OpenRouter) to .env file for AI processing.",
+                source_system="service:ai_providers",
+                context={"available_providers": list(PROVIDERS.keys())}
+            )
+        else:
+            # All configured providers are at daily limit
+            raise ConfigurationInterventionRequired(
+                title="AI Provider Daily Limits Reached",
+                description="All configured AI providers have reached their daily free tier limits. Add additional API keys or wait until tomorrow.",
+                source_system="service:ai_providers",
+                context={
+                    "configured_providers": providers_with_keys,
+                    "daily_limits": {p: PROVIDERS[p].daily_limit for p in providers_with_keys}
+                }
+            )
 
     logger.info(f"Using {provider} for {task_type} task")
 

@@ -619,6 +619,28 @@ raise ConfigurationInterventionRequired(
 - `app/main.py` - Added manual tasks router
 - `requirements.txt` - Added `filelock>=3.13.0` dependency
 
+### Future Enhancement Roadmap
+
+**Immediate Practical Upgrades (Completed 2026-01-23):**
+- ✅ **Email Client Integration**: Missing email credentials now raise `ConfigurationInterventionRequired` exceptions
+- ✅ **Email Intelligence Agent**: Missing NTFY configuration now raises `ConfigurationInterventionRequired` exceptions
+- ✅ **AI Provider Service**: Missing API keys and daily limit exhaustion now raise `ConfigurationInterventionRequired` exceptions
+- ✅ **Error Handler Integration**: All `ManualInterventionRequired` exceptions automatically logged to database and markdown file
+
+**Medium-Term Enhancements (Next 1-2 Months):**
+- **Web Interface**: Simple UI for viewing/completing manual tasks
+- **Notification Integration**: Push notifications for high-priority tasks (ntfy, email, mobile)
+- **SLA Tracking**: Track time-to-completion metrics with automatic priority escalation
+- **Template System**: Pre-defined task templates for common scenarios
+- **Workflow Integration**: Link manual tasks to n8n workflows for automation
+- **Priority Escalation**: Automatic priority increase for aging tasks
+
+**Long-Term Vision (Next 3-6 Months):**
+- **AI-Powered Task Resolution**: AI agents suggest solutions for manual tasks
+- **Cross-System Integration**: Manual tasks from all NEXUS subsystems unified
+- **Predictive Task Generation**: Anticipate manual tasks before they occur
+- **Collaborative Resolution**: Multiple agents can collaborate on manual task resolution
+
 ## Simplified Swarm Communication Layer ("Tiny Swarm")
 
 NEXUS implements a simplified swarm communication layer focused on basic Redis Pub/Sub messaging for agent coordination. Advanced features (RAFT consensus, voting system, event bus) are **DISABLED** to ensure system stability and simplicity.

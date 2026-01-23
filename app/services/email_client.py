@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import re
 
 from ..config import settings
+from ..exceptions.manual_tasks import ConfigurationInterventionRequired
 
 logger = logging.getLogger(__name__)
 
@@ -141,19 +142,31 @@ def get_email_body(msg) -> tuple:
     return body, is_html
 
 
-def connect_imap(account: str) -> Optional[imaplib.IMAP4_SSL]:
+def connect_imap(account: str) -> imaplib.IMAP4_SSL:
     """Connect to IMAP server."""
     config = EMAIL_ACCOUNTS.get(account)
     if not config:
         logger.error(f"Unknown email account: {account}")
-        return None
+        raise ConfigurationInterventionRequired(
+            description=f"Unknown email account '{account}'. Valid accounts: {list(EMAIL_ACCOUNTS.keys())}",
+            title=f"Configure Email Account: {account}",
+            source_system="service:email_client",
+            context={"account": account, "valid_accounts": list(EMAIL_ACCOUNTS.keys())}
+        )
 
     email_addr = getattr(settings, config["email_env"], None)
     password = getattr(settings, config["password_env"], None)
 
     if not email_addr or not password:
         logger.warning(f"Credentials not configured for {account}")
-        return None
+        env_var_name = config["email_env"] if not email_addr else config["password_env"]
+        missing_cred = "email address" if not email_addr else "app password"
+        raise ConfigurationInterventionRequired(
+            description=f"{missing_cred.capitalize()} not configured for {account}. Add {env_var_name} to .env file",
+            title=f"Configure {account.capitalize()} Credentials",
+            source_system="service:email_client",
+            context={"account": account, "missing_env_var": env_var_name, "missing_credential": missing_cred}
+        )
 
     try:
         imap = imaplib.IMAP4_SSL(config["imap_server"], config["imap_port"])
@@ -162,7 +175,12 @@ def connect_imap(account: str) -> Optional[imaplib.IMAP4_SSL]:
         return imap
     except Exception as e:
         logger.error(f"Failed to connect to {account}: {e}")
-        return None
+        raise ConfigurationInterventionRequired(
+            description=f"Failed to connect to {account}: {str(e)}. Check app password and internet connection.",
+            title=f"Email Connection Failed: {account}",
+            source_system="service:email_client",
+            context={"account": account, "error": str(e), "server": config["imap_server"], "port": config["imap_port"]}
+        )
 
 
 async def fetch_emails(

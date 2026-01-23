@@ -27,6 +27,7 @@ from ..services.insight_engine import (
     generate_insights, get_recent_insights,
     mark_insight_seen, generate_daily_digest
 )
+from ..exceptions.manual_tasks import ConfigurationInterventionRequired
 
 # Import agent framework
 from .base import BaseAgent, AgentType, AgentStatus
@@ -868,8 +869,17 @@ async def log_transaction(email: EmailMessage, transaction: Dict[str, Any]) -> N
 async def send_alert(email: EmailMessage, result: Dict[str, Any]) -> None:
     """Send notification for important email."""
     if not settings.ntfy_topic:
-        logger.warning("NTFY_TOPIC not configured, skipping alert")
-        return
+        raise ConfigurationInterventionRequired(
+            title="Configure NTFY Notifications",
+            description="NTFY_TOPIC environment variable not configured. Add NTFY_TOPIC to .env file to receive email alerts.",
+            source_system="agent:EmailIntelligenceAgent",
+            source_id=email.message_id if email.message_id else None,
+            context={
+                "email_subject": email.subject[:100],
+                "email_sender": email.sender,
+                "classification": result.get("classification", "unknown")
+            }
+        )
 
     try:
         classification = result.get("classification", "")
