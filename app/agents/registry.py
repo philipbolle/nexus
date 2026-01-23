@@ -604,7 +604,7 @@ class AgentRegistry:
                         "system_prompt": agent_data["system_prompt"],
                         "capabilities": agent_data["capabilities"] or [],
                         "supervisor_id": str(agent_data["supervisor_id"]) if agent_data["supervisor_id"] else None,
-                        "config": agent_data.get("config") or {}
+                        "config": self._normalize_config(agent_data.get("config"))
                     }
                     if agent_type == "domain":
                         kwargs["domain"] = agent_data["domain"] if agent_data["domain"] else "general"
@@ -714,9 +714,9 @@ class AgentRegistry:
                     id, name, display_name, description, agent_type, domain,
                     role, goal, backstory, system_prompt, capabilities,
                     supervisor_id, is_active, allow_delegation, max_iterations,
-                    temperature, version, created_at, updated_at
+                    temperature, version, config, created_at, updated_at
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW()
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW(), NOW()
                 ) ON CONFLICT (name) DO UPDATE SET
                     name = EXCLUDED.name,
                     display_name = EXCLUDED.display_name,
@@ -734,6 +734,7 @@ class AgentRegistry:
                     max_iterations = EXCLUDED.max_iterations,
                     temperature = EXCLUDED.temperature,
                     version = EXCLUDED.version,
+                    config = EXCLUDED.config,
                     updated_at = NOW()
                 RETURNING id
                 """,
@@ -753,7 +754,8 @@ class AgentRegistry:
                 True,  # allow_delegation
                 getattr(agent, 'max_iterations', 10),
                 getattr(agent, 'temperature', 0.7),
-                1  # version
+                1,  # version
+                getattr(agent, 'config', {})  # config
             )
 
             # Check if the ID in database differs from agent's ID (name conflict occurred)
@@ -866,6 +868,36 @@ class AgentRegistry:
             if domain not in self.domain_index:
                 self.domain_index[domain] = set()
             self.domain_index[domain].add(agent.agent_id)
+
+    def _normalize_config(self, config_value):
+        """
+        Normalize config value to a dictionary.
+
+        Handles:
+        - None -> empty dict
+        - String -> JSON parse
+        - Dict -> return as-is
+        - Other -> empty dict with warning
+        """
+        import json
+        from . import logger
+
+        if config_value is None:
+            return {}
+
+        if isinstance(config_value, dict):
+            return config_value
+
+        if isinstance(config_value, str):
+            try:
+                return json.loads(config_value)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse config string as JSON: {config_value[:100]}")
+                return {}
+
+        # Unexpected type
+        logger.warning(f"Unexpected config type {type(config_value)}, using empty dict")
+        return {}
 
 
 # Global registry instance

@@ -124,6 +124,19 @@ async def _agent_to_response(agent: "BaseAgent") -> AgentResponse:
     from ..agents.base import BaseAgent, AgentType, AgentStatus
     import json
 
+    def normalize_config(val):
+        """Normalize config value to dict."""
+        if val is None:
+            return {}
+        if isinstance(val, dict):
+            return val
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
     # Try to fetch from database first
     agent_data = None
     try:

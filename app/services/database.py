@@ -22,11 +22,26 @@ class DatabaseService:
     async def initialize(self):
         """Initialize the database connection pool."""
         if not self._pool:
+            async def init_connection(conn):
+                """Initialize connection with JSONB codec."""
+                await conn.set_type_codec(
+                    'jsonb',
+                    encoder=json.dumps,
+                    decoder=json.loads,
+                    schema='pg_catalog'
+                )
+                await conn.set_type_codec(
+                    'json',
+                    encoder=json.dumps,
+                    decoder=json.loads,
+                    schema='pg_catalog'
+                )
             self._pool = await asyncpg.create_pool(
                 dsn=self.connection_string,
                 min_size=1,
                 max_size=10,
-                command_timeout=60
+                command_timeout=60,
+                init=init_connection,
             )
     
     async def close(self):

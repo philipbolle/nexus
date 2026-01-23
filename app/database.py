@@ -4,6 +4,7 @@ Async PostgreSQL connection pool using asyncpg.
 """
 
 import asyncpg
+import json
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 import logging
@@ -11,6 +12,27 @@ import logging
 from .config import settings
 
 logger = logging.getLogger(__name__)
+
+
+async def init_connection(conn):
+    """
+    Initialize a database connection with custom type codecs.
+    This ensures JSONB columns are properly decoded to Python dict/list.
+    """
+    # Register JSONB codec
+    await conn.set_type_codec(
+        'jsonb',
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema='pg_catalog'
+    )
+    # Also register 'json' type if needed
+    await conn.set_type_codec(
+        'json',
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema='pg_catalog'
+    )
 
 
 class Database:
@@ -27,6 +49,7 @@ class Database:
                 min_size=2,
                 max_size=10,
                 command_timeout=60,
+                init=init_connection,
             )
             logger.info("Database connection pool created")
 
