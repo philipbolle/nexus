@@ -937,7 +937,6 @@ class AgentRegistry:
         - Other -> empty dict with warning
         """
         import json
-        from . import logger
 
         if config_value is None:
             return {}
