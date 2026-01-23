@@ -61,7 +61,7 @@ class CacheService:
                     # Update hit count in background
                     asyncio.create_task(self._update_semantic_cache_hit(data['id']))
                     return data
-                except:
+                except Exception:
                     # Corrupted cache, delete it
                     await self.redis_client.delete(redis_key)
 
@@ -181,7 +181,7 @@ class CacheService:
                     # Update access count in background
                     asyncio.create_task(self._update_embedding_cache_access(content_hash))
                     return embedding
-                except:
+                except Exception:
                     await self.redis_client.delete(redis_key)
         
         # Fall back to PostgreSQL

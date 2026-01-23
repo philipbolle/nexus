@@ -6,12 +6,15 @@ Real-time tracking and analysis of AI API costs.
 import asyncio
 import json
 import uuid
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from .config import config
 from .database import db_service
 from .cache_service import cache_service
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class CostMetrics:
@@ -115,7 +118,7 @@ class CostTracker:
             # For now, we'll just log the check
             pass
         except Exception as e:
-            print(f"Error checking cost alerts: {e}")
+            logger.error(f"Error checking cost alerts: {e}")
     
     # ===== Cost Analysis Methods =====
     
@@ -380,13 +383,16 @@ async def close_cost_tracker():
 
 if __name__ == "__main__":
     # Test the cost tracker
+    import sys
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
     async def test():
         await initialize_cost_tracker()
-        
+
         # Generate a sample report
         report = await cost_tracker.generate_cost_report(days=7)
-        print("Cost Report:", json.dumps(report, indent=2, default=str))
-        
+        logger.info("Cost Report: %s", json.dumps(report, indent=2, default=str))
+
         await close_cost_tracker()
-    
+
     asyncio.run(test())

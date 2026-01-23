@@ -167,6 +167,12 @@ class AgentRegistry:
         # Register in registry
         await self._register_agent(agent)
 
+        # Store in database (non-blocking, don't fail creation if DB fails)
+        try:
+            await self._store_agent_in_db(agent)
+        except Exception as e:
+            logger.warning(f"Failed to store agent {name} in database, continuing with in-memory only: {e}")
+
         # Initialize agent
         await agent.initialize()
 
@@ -235,6 +241,12 @@ class AgentRegistry:
         if 'capabilities' in kwargs or 'domain' in kwargs:
             await self._update_indexes(agent)
 
+        # Update database
+        try:
+            await self._store_agent_in_db(agent)
+        except Exception as e:
+            logger.warning(f"Failed to update agent {agent.name} in database: {e}")
+
         logger.info(f"Updated agent: {agent.name} ({agent_id})")
         return agent
 
@@ -267,6 +279,15 @@ class AgentRegistry:
 
         if agent.domain and agent.domain in self.domain_index:
             self.domain_index[agent.domain].discard(agent_id_str)
+
+        # Mark as inactive in database (soft delete)
+        try:
+            await db.execute(
+                "UPDATE agents SET is_active = false, updated_at = NOW() WHERE id = $1",
+                agent_id
+            )
+        except Exception as e:
+            logger.warning(f"Failed to mark agent {agent.name} as inactive in database: {e}")
 
         logger.info(f"Deleted agent: {agent.name} ({agent_id})")
         return True
@@ -512,11 +533,16 @@ class AgentRegistry:
     async def _register_builtin_types(self) -> None:
         """Register built-in agent types."""
         from .base import DomainAgent, OrchestratorAgent
+        from .email_intelligence import EmailIntelligenceAgent
+        from .swarm.agent import SwarmAgent
 
         builtin_types = {
             "domain": DomainAgent,
             "orchestrator": OrchestratorAgent,
-            # Additional types can be added here
+            "email_intelligence": EmailIntelligenceAgent,
+            "worker": SwarmAgent,  # Task-specific agents with swarm capabilities
+            "supervisor": SwarmAgent,  # Manager agents with swarm capabilities
+            "analyzer": DomainAgent,  # Analysis agents (default to DomainAgent)
         }
 
         for type_name, agent_class in builtin_types.items():
@@ -525,13 +551,30 @@ class AgentRegistry:
     async def _load_agents_from_db(self) -> None:
         """Load active agents from database."""
         try:
-            active_agents = await db.fetch_all(
-                """
-                SELECT id, name, agent_type, domain, description, system_prompt,
-                       capabilities, supervisor_id
-                FROM agents WHERE is_active = true
-                """
-            )
+            # Try to load with config column (may not exist in older schemas)
+            try:
+                active_agents = await db.fetch_all(
+                    """
+                    SELECT id, name, agent_type, domain, description, system_prompt,
+                           capabilities, supervisor_id, config
+                    FROM agents WHERE is_active = true
+                    """
+                )
+            except Exception as e:
+                if 'column "config" does not exist' in str(e):
+                    logger.warning("config column not found in agents table, using default empty config")
+                    active_agents = await db.fetch_all(
+                        """
+                        SELECT id, name, agent_type, domain, description, system_prompt,
+                               capabilities, supervisor_id
+                        FROM agents WHERE is_active = true
+                        """
+                    )
+                    # Add empty config to each agent data
+                    for agent_data in active_agents:
+                        agent_data["config"] = {}
+                else:
+                    raise
 
             logger.info(f"Found {len(active_agents)} active agents in database")
 
@@ -545,17 +588,42 @@ class AgentRegistry:
 
                     # Create agent instance
                     agent_class = self.agent_types[agent_type]
+
+                    # Convert agent_type string to AgentType enum
+                    try:
+                        agent_type_enum = AgentType(agent_type)
+                    except ValueError:
+                        logger.warning(f"Unknown AgentType enum value '{agent_type}' for agent {agent_data['name']}, defaulting to DOMAIN")
+                        agent_type_enum = AgentType.DOMAIN
+
                     kwargs = {
                         "agent_id": str(agent_data["id"]),
                         "name": agent_data["name"],
+                        "agent_type": agent_type_enum,
                         "description": agent_data["description"],
                         "system_prompt": agent_data["system_prompt"],
                         "capabilities": agent_data["capabilities"] or [],
                         "supervisor_id": str(agent_data["supervisor_id"]) if agent_data["supervisor_id"] else None,
-                        "config": {}
+                        "config": agent_data.get("config") or {}
                     }
                     if agent_type == "domain":
                         kwargs["domain"] = agent_data["domain"] if agent_data["domain"] else "general"
+
+                    # Handle swarm-specific parameters for SwarmAgent classes
+                    try:
+                        from .swarm.agent import SwarmAgent
+                        if issubclass(agent_class, SwarmAgent):
+                            config = kwargs["config"]
+                            if config:
+                                # Extract swarm_id and swarm_role from config if present
+                                if "swarm_id" in config:
+                                    kwargs["swarm_id"] = config.get("swarm_id")
+                                if "swarm_role" in config:
+                                    kwargs["swarm_role"] = config.get("swarm_role", "member")
+                    except ImportError:
+                        # Swarm module not available, skip swarm parameter extraction
+                        pass
+
                     agent = agent_class(**kwargs)
 
                     # Register but don't initialize yet
@@ -632,6 +700,109 @@ class AgentRegistry:
             self.domain_index[domain].add(agent.agent_id)
 
         logger.debug(f"Registered agent: {agent.name}")
+
+    async def _store_agent_in_db(self, agent: BaseAgent) -> None:
+        """
+        Store agent metadata in database.
+
+        Creates or updates agent record with current configuration.
+        """
+        try:
+            result = await db.fetch_one(
+                """
+                INSERT INTO agents (
+                    id, name, display_name, description, agent_type, domain,
+                    role, goal, backstory, system_prompt, capabilities,
+                    supervisor_id, is_active, allow_delegation, max_iterations,
+                    temperature, version, created_at, updated_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW()
+                ) ON CONFLICT (name) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    display_name = EXCLUDED.display_name,
+                    description = EXCLUDED.description,
+                    agent_type = EXCLUDED.agent_type,
+                    domain = EXCLUDED.domain,
+                    role = EXCLUDED.role,
+                    goal = EXCLUDED.goal,
+                    backstory = EXCLUDED.backstory,
+                    system_prompt = EXCLUDED.system_prompt,
+                    capabilities = EXCLUDED.capabilities,
+                    supervisor_id = EXCLUDED.supervisor_id,
+                    is_active = EXCLUDED.is_active,
+                    allow_delegation = EXCLUDED.allow_delegation,
+                    max_iterations = EXCLUDED.max_iterations,
+                    temperature = EXCLUDED.temperature,
+                    version = EXCLUDED.version,
+                    updated_at = NOW()
+                RETURNING id
+                """,
+                UUID(agent.agent_id),
+                agent.name,
+                agent.name,  # display_name same as name
+                getattr(agent, 'description', ''),
+                agent.agent_type.value if hasattr(agent.agent_type, 'value') else str(agent.agent_type),
+                getattr(agent, 'domain', None),
+                getattr(agent, 'role', 'assistant'),
+                getattr(agent, 'goal', ''),
+                getattr(agent, 'backstory', ''),
+                getattr(agent, 'system_prompt', ''),
+                getattr(agent, 'capabilities', []),
+                UUID(getattr(agent, 'supervisor_id', None)) if getattr(agent, 'supervisor_id', None) else None,
+                True,  # is_active
+                True,  # allow_delegation
+                getattr(agent, 'max_iterations', 10),
+                getattr(agent, 'temperature', 0.7),
+                1  # version
+            )
+
+            # Check if the ID in database differs from agent's ID (name conflict occurred)
+            db_agent_id = str(result["id"])
+            if db_agent_id != agent.agent_id:
+                logger.warning(
+                    f"Agent name conflict: Agent '{agent.name}' already exists in database with ID {db_agent_id}. "
+                    f"Updating agent ID from {agent.agent_id} to match existing database record."
+                )
+                # Update agent ID and registry mappings to match existing database record
+                old_id = agent.agent_id
+
+                # Remove old ID from registry
+                if old_id in self.agents:
+                    del self.agents[old_id]
+
+                # Remove old ID from capability index
+                for capability_set in self.capability_index.values():
+                    capability_set.discard(old_id)
+
+                # Remove old ID from domain index
+                if hasattr(agent, 'domain') and agent.domain:
+                    domain = agent.domain
+                    if domain in self.domain_index:
+                        self.domain_index[domain].discard(old_id)
+
+                # Update agent ID
+                agent.agent_id = db_agent_id
+
+                # Re-register with new ID
+                self.agents[agent.agent_id] = agent
+
+                # Add to capability index with new ID
+                for capability in agent.capabilities:
+                    if capability not in self.capability_index:
+                        self.capability_index[capability] = set()
+                    self.capability_index[capability].add(agent.agent_id)
+
+                # Add to domain index with new ID
+                if hasattr(agent, 'domain') and agent.domain:
+                    domain = agent.domain
+                    if domain not in self.domain_index:
+                        self.domain_index[domain] = set()
+                    self.domain_index[domain].add(agent.agent_id)
+
+            logger.debug(f"Stored agent {agent.name} in database (ID in DB: {db_agent_id})")
+        except Exception as e:
+            logger.error(f"Failed to store agent {agent.name} in database: {e}")
+            # Don't raise - agent can still function in memory
 
     async def _score_agent_for_task(self, agent: BaseAgent, task_description: str) -> float:
         """

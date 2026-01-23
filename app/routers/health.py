@@ -73,18 +73,34 @@ async def system_status(database: Database = Depends(get_db)):
     except Exception as e:
         services.append(ServiceStatus(name="n8n", status="unknown", details=str(e)))
 
-    # Check Ollama
+    # Check ChromaDB
     try:
         result = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Running}}", "nexus-ollama"],
+            ["docker", "inspect", "-f", "{{.State.Running}}", "nexus-chromadb"],
             capture_output=True, text=True, timeout=5
         )
         if "true" in result.stdout.lower():
-            services.append(ServiceStatus(name="ollama", status="healthy"))
+            services.append(ServiceStatus(name="chromadb", status="healthy"))
         else:
-            services.append(ServiceStatus(name="ollama", status="unhealthy"))
+            services.append(ServiceStatus(name="chromadb", status="unhealthy"))
     except Exception as e:
-        services.append(ServiceStatus(name="ollama", status="unknown", details=str(e)))
+        services.append(ServiceStatus(name="chromadb", status="unknown", details=str(e)))
+
+    # Check Agent Framework
+    try:
+        from ..agents.registry import registry
+        agents = await registry.list_agents()
+        services.append(ServiceStatus(
+            name="agent_framework",
+            status="healthy",
+            details=f"{len(agents)} agents registered"
+        ))
+    except Exception as e:
+        services.append(ServiceStatus(
+            name="agent_framework",
+            status="unhealthy",
+            details=f"Initialization error: {str(e)}"
+        ))
 
     # Determine overall status
     unhealthy_count = sum(1 for s in services if s.status == "unhealthy")

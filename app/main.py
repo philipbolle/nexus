@@ -10,7 +10,9 @@ import logging
 
 from .config import settings
 from .database import db
-from .routers import health, chat, finance, email, agents, evolution
+from .routers import health, chat, finance, email, agents, evolution, swarm
+# from .routers import distributed_tasks  # Disabled for simplification
+from .agents.swarm import initialize_swarm_pubsub, initialize_event_bus, close_swarm_pubsub, close_event_bus
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +38,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize agent framework: {e}")
         # Continue without agent framework - endpoints may fail
 
+    # Initialize basic swarm communication (Redis Pub/Sub only)
+    try:
+        await initialize_swarm_pubsub()
+        logger.info("Swarm Pub/Sub initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize swarm Pub/Sub: {e}")
+        # Continue without swarm - endpoints may fail
+
     logger.info(f"API running on port {settings.api_port}")
 
     yield
@@ -44,6 +54,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down NEXUS API...")
     await db.disconnect()
     logger.info("Database disconnected")
+
+    # Close swarm communication layer
+    try:
+        await close_swarm_pubsub()
+        logger.info("Swarm Pub/Sub closed")
+    except Exception as e:
+        logger.error(f"Failed to close swarm Pub/Sub: {e}")
 
 
 # Create FastAPI app
@@ -70,6 +87,8 @@ app.include_router(finance.router)
 app.include_router(email.router)
 app.include_router(agents.router)
 app.include_router(evolution.router)
+app.include_router(swarm.router)
+# app.include_router(distributed_tasks.router)  # Disabled for simplification
 
 
 @app.get("/")

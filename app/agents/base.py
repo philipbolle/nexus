@@ -14,6 +14,8 @@ from typing import Dict, Any, List, Optional, Callable, Union
 from datetime import datetime
 from enum import Enum
 
+import asyncpg
+
 from ..database import db
 from ..config import settings
 from ..services.ai_providers import ai_request, TaskType
@@ -37,6 +39,7 @@ class AgentStatus(Enum):
 class AgentType(Enum):
     """Types of agents in the hierarchy."""
     DOMAIN = "domain"           # Specialized agent (finance, health, email, etc.)
+    EMAIL_INTELLIGENCE = "email_intelligence"  # Email intelligence agent
     ORCHESTRATOR = "orchestrator"  # Coordinates multiple agents
     SUPERVISOR = "supervisor"   # Manages subordinate agents
     WORKER = "worker"           # Task-specific agent
@@ -365,30 +368,110 @@ class BaseAgent(ABC):
                 self.supervisor_id = agent_data["supervisor_id"]
                 logger.debug(f"Loaded agent {self.name} from database")
         else:
-            # Create new agent record
-            await db.execute(
-                """
-                INSERT INTO agents
-                (id, name, display_name, description, agent_type, domain, role, goal,
-                 backstory, system_prompt, capabilities, tools, supervisor_id, is_active)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                """,
-                self.agent_id,
-                self.name,
-                self.name,  # display_name
-                self.description,
-                self.agent_type.value,
-                self.config.get("domain", "general"),
-                self.config.get("role", f"{self.agent_type.value} agent"),
-                self.config.get("goal", "Complete assigned tasks effectively"),
-                self.config.get("backstory", ""),
-                self.system_prompt,
-                self.capabilities,
-                list(self._tools.keys()),
-                self.supervisor_id,
-                True
+            # Check if agent with same name already exists (duplicate ID scenario)
+            existing_by_name = await db.fetch_one(
+                "SELECT id FROM agents WHERE name = $1",
+                self.name
             )
-            logger.debug(f"Created new agent record for {self.name}")
+
+            if existing_by_name:
+                # Agent with same name exists but different ID
+                # Update our agent ID to match existing record and load it
+                existing_id = existing_by_name["id"]
+                logger.warning(
+                    f"Agent '{self.name}' already exists with ID {existing_id}, "
+                    f"updating agent ID from {self.agent_id} to match existing record."
+                )
+                self.agent_id = existing_id
+                # Load existing agent configuration
+                agent_data = await db.fetch_one(
+                    """
+                    SELECT name, display_name, description, agent_type, domain, role, goal,
+                           backstory, system_prompt, model_preference, fallback_models,
+                           capabilities, tools, supervisor_id, is_active, allow_delegation,
+                           max_iterations, temperature, version
+                    FROM agents WHERE id = $1
+                    """,
+                    self.agent_id
+                )
+                if agent_data:
+                    self.name = agent_data["name"]
+                    self.description = agent_data["description"]
+                    self.system_prompt = agent_data["system_prompt"]
+                    self.capabilities = agent_data["capabilities"] or []
+                    self.supervisor_id = agent_data["supervisor_id"]
+                    logger.debug(f"Loaded agent {self.name} from database (after name conflict)")
+            else:
+                # Create new agent record with duplicate handling
+                try:
+                    await db.execute(
+                        """
+                        INSERT INTO agents
+                        (id, name, display_name, description, agent_type, domain, role, goal,
+                         backstory, system_prompt, capabilities, tools, supervisor_id, is_active)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        """,
+                        self.agent_id,
+                        self.name,
+                        self.name,  # display_name
+                        self.description,
+                        self.agent_type.value,
+                        self.config.get("domain", "general"),
+                        self.config.get("role", f"{self.agent_type.value} agent"),
+                        self.config.get("goal", "Complete assigned tasks effectively"),
+                        self.config.get("backstory", ""),
+                        self.system_prompt,
+                        self.capabilities,
+                        list(self._tools.keys()),
+                        self.supervisor_id,
+                        True
+                    )
+                    logger.debug(f"Created new agent record for {self.name}")
+
+                except asyncpg.exceptions.UniqueViolationError as e:
+                    # Handle duplicate key violation (likely duplicate name)
+                    logger.warning(
+                        f"Duplicate agent creation detected for '{self.name}': {e}. "
+                        f"Loading existing agent instead."
+                    )
+
+                    # Query existing agent by name
+                    existing_by_name = await db.fetch_one(
+                        "SELECT id FROM agents WHERE name = $1",
+                        self.name
+                    )
+
+                    if existing_by_name:
+                        # Update our agent ID to match existing record and load it
+                        existing_id = existing_by_name["id"]
+                        logger.info(
+                            f"Agent '{self.name}' already exists with ID {existing_id}, "
+                            f"updating agent ID from {self.agent_id} to match existing record."
+                        )
+                        self.agent_id = existing_id
+
+                        # Load existing agent configuration
+                        agent_data = await db.fetch_one(
+                            """
+                            SELECT name, display_name, description, agent_type, domain, role, goal,
+                                   backstory, system_prompt, model_preference, fallback_models,
+                                   capabilities, tools, supervisor_id, is_active, allow_delegation,
+                                   max_iterations, temperature, version
+                            FROM agents WHERE id = $1
+                            """,
+                            self.agent_id
+                        )
+                        if agent_data:
+                            self.name = agent_data["name"]
+                            self.description = agent_data["description"]
+                            self.system_prompt = agent_data["system_prompt"]
+                            self.capabilities = agent_data["capabilities"] or []
+                            self.supervisor_id = agent_data["supervisor_id"]
+                            logger.debug(f"Loaded agent {self.name} from database (after duplicate violation)")
+                    else:
+                        # This shouldn't happen, but if it does, re-raise the error
+                        logger.error(f"Unique violation but no existing agent found for name '{self.name}'")
+                        raise
 
     async def _register_core_tools(self) -> None:
         """Register core tools available to all agents."""

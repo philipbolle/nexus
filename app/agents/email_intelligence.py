@@ -31,6 +31,7 @@ from ..services.insight_engine import (
 # Import agent framework
 from .base import BaseAgent, AgentType, AgentStatus
 from .tools import ToolSystem, ToolDefinition, ToolParameter
+from .memory import MemorySystem
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,8 @@ class EmailIntelligenceAgent(BaseAgent):
         system_prompt: str = "",
         capabilities: Optional[List[str]] = None,
         supervisor_id: Optional[str] = None,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        **kwargs
     ):
         if capabilities is None:
             capabilities = [
@@ -104,15 +106,30 @@ class EmailIntelligenceAgent(BaseAgent):
                 "importance_threshold_summarize": 0.7
             }
 
+        # Extract domain from kwargs if provided (used by registry)
+        domain = kwargs.pop("domain", None)
+        if domain:
+            config["domain"] = domain
+
+        # Merge any config provided in kwargs
+        kwargs_config = kwargs.pop("config", None)
+        if kwargs_config:
+            config.update(kwargs_config)
+
+        # Remove agent_type from kwargs (we set it explicitly)
+        kwargs.pop("agent_type", None)
+
+        # Pass remaining kwargs to super (should be empty after processing)
         super().__init__(
             agent_id=agent_id,
             name=name,
-            agent_type=AgentType.DOMAIN,
+            agent_type=AgentType.EMAIL_INTELLIGENCE,
             description=description,
             system_prompt=system_prompt,
             capabilities=capabilities,
             supervisor_id=supervisor_id,
-            config=config
+            config=config,
+            **kwargs
         )
 
     async def _on_initialize(self) -> None:
@@ -182,11 +199,11 @@ class EmailIntelligenceAgent(BaseAgent):
     async def _register_email_tools(self) -> None:
         """Register email-specific tools."""
         # Tool: classify_email
-        await self.register_tool(
-            name="classify_email",
-            display_name="Classify Email",
-            description="Classify an email into categories (spam, promo, social, financial, work, personal, important)",
-            input_schema={
+        schema = {
+            "name": "classify_email",
+            "display_name": "Classify Email",
+            "description": "Classify an email into categories (spam, promo, social, financial, work, personal, important)",
+            "input_schema": {
                 "type": "object",
                 "properties": {
                     "subject": {"type": "string", "description": "Email subject"},
@@ -196,23 +213,23 @@ class EmailIntelligenceAgent(BaseAgent):
                 },
                 "required": ["subject", "sender"]
             },
-            output_schema={
+            "output_schema": {
                 "type": "object",
                 "properties": {
                     "classification": {"type": "string"},
                     "importance_score": {"type": "number"},
                     "confidence": {"type": "number"}
                 }
-            },
-            function=self._tool_classify_email
-        )
+            }
+        }
+        await self.register_tool("classify_email", self._tool_classify_email, schema)
 
         # Tool: extract_email_data
-        await self.register_tool(
-            name="extract_email_data",
-            display_name="Extract Email Data",
-            description="Extract structured data (transactions, dates, people) from email content",
-            input_schema={
+        schema = {
+            "name": "extract_email_data",
+            "display_name": "Extract Email Data",
+            "description": "Extract structured data (transactions, dates, people) from email content",
+            "input_schema": {
                 "type": "object",
                 "properties": {
                     "subject": {"type": "string"},
@@ -221,7 +238,7 @@ class EmailIntelligenceAgent(BaseAgent):
                 },
                 "required": ["subject", "sender", "body"]
             },
-            output_schema={
+            "output_schema": {
                 "type": "object",
                 "properties": {
                     "transaction": {"type": "object"},
@@ -231,16 +248,16 @@ class EmailIntelligenceAgent(BaseAgent):
                     "companies": {"type": "array"},
                     "subscription": {"type": "object"}
                 }
-            },
-            function=self._tool_extract_data
-        )
+            }
+        }
+        await self.register_tool("extract_email_data", self._tool_extract_data, schema)
 
         # Tool: summarize_email
-        await self.register_tool(
-            name="summarize_email",
-            display_name="Summarize Email",
-            description="Summarize email content in 1-2 sentences",
-            input_schema={
+        schema = {
+            "name": "summarize_email",
+            "display_name": "Summarize Email",
+            "description": "Summarize email content in 1-2 sentences",
+            "input_schema": {
                 "type": "object",
                 "properties": {
                     "subject": {"type": "string"},
@@ -249,15 +266,15 @@ class EmailIntelligenceAgent(BaseAgent):
                 },
                 "required": ["subject", "body"]
             },
-            output_schema={
+            "output_schema": {
                 "type": "object",
                 "properties": {
                     "summary": {"type": "string"},
                     "key_points": {"type": "array"}
                 }
-            },
-            function=self._tool_summarize_email
-        )
+            }
+        }
+        await self.register_tool("summarize_email", self._tool_summarize_email, schema)
 
     async def _load_email_config(self) -> None:
         """Load email-specific configuration from database."""
@@ -321,8 +338,10 @@ class EmailIntelligenceAgent(BaseAgent):
             json_match = re.search(r'\{.*\}', extract_result["content"], re.DOTALL)
             if json_match:
                 extracted = json.loads(json_match.group())
-        except:
-            logger.warning(f"Failed to parse extraction")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse extraction: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error parsing extraction: {e}")
 
         return {
             "success": True,
@@ -542,8 +561,10 @@ async def process_email(email: EmailMessage) -> Dict[str, Any]:
 
                         # Store extracted entities
                         await store_extracted_entities(email.message_id, extracted)
-                except:
-                    logger.warning(f"Failed to parse extraction for {email.message_id[:20]}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse extraction for {email.message_id[:20]}: {e}")
+                except Exception as e:
+                    logger.warning(f"Unexpected error parsing extraction for {email.message_id[:20]}: {e}")
 
             # 5. Summarize important emails (Gemini - better quality)
             if importance >= 0.7 or classification in ["important", "financial"]:
@@ -568,6 +589,9 @@ async def process_email(email: EmailMessage) -> Dict[str, Any]:
 
         # Store processed email
         await store_processed_email(email, result)
+
+        # Store insights in memory system
+        await store_email_insight_in_memory(email, result)
 
         return result
 
@@ -741,6 +765,43 @@ async def store_extracted_entities(email_id: str, extracted: Dict[str, Any]) -> 
         )
 
 
+async def store_email_insight_in_memory(email: EmailMessage, result: Dict[str, Any]) -> None:
+    """Store email insights in memory system for future retrieval."""
+    try:
+        memory = MemorySystem()
+        await memory.initialize()
+
+        # Create a semantic memory about the email classification
+        classification = result.get("classification")
+        sender = email.sender
+        subject = email.subject[:100]
+
+        memory_content = f"Email from {sender} classified as {classification}: {subject}"
+        memory_metadata = {
+            "source": "email_processing",
+            "email_id": email.message_id,
+            "sender": sender,
+            "classification": classification,
+            "importance_score": result.get("importance_score", 0.5),
+            "action_taken": result.get("action_taken"),
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Store as semantic memory (agent_id can be "email_system" or use email agent ID)
+        await memory.store_memory(
+            agent_id="email_system",
+            memory_type="semantic",
+            content=memory_content,
+            metadata=memory_metadata,
+            embedding_text=memory_content  # Use same content for embedding
+        )
+
+        logger.debug(f"Stored email insight in memory: {memory_content[:50]}...")
+    except Exception as e:
+        logger.warning(f"Failed to store email insight in memory: {e}")
+        # Non-critical failure
+
+
 async def store_processed_email(email: EmailMessage, result: Dict[str, Any]) -> None:
     """Store processed email in database."""
     await db.execute(
@@ -845,14 +906,47 @@ async def register_email_agent() -> EmailIntelligenceAgent:
     Register email agent with the agent registry.
 
     Call this during system startup to register the email agent.
+    Returns existing agent if already registered.
     """
-    from .registry import AgentRegistry
+    from .registry import registry
 
-    agent = EmailIntelligenceAgent()
-    await agent.initialize()
+    # Check if email agent already exists by name
+    existing_agent = await registry.get_agent_by_name("Email Intelligence Agent")
+    if existing_agent:
+        logger.info(f"Email agent already registered: {existing_agent.name}")
+        return existing_agent
 
-    registry = AgentRegistry()
-    await registry.register_agent_instance(agent)
-
-    logger.info(f"Email agent registered: {agent.name}")
-    return agent
+    # Create new email agent using registry's create_agent method
+    # This ensures proper registration and database storage
+    try:
+        agent = await registry.create_agent(
+            agent_type="email_intelligence",
+            name="Email Intelligence Agent",
+            description="Processes emails intelligently using AI for classification, extraction, and automation.",
+            capabilities=[
+                "email_processing",
+                "classification",
+                "extraction",
+                "summarization",
+                "transaction_logging",
+                "alerting",
+                "scanning"
+            ],
+            domain="email",
+            config={
+                "max_emails_per_scan": 50,
+                "default_since_days": 1,
+                "importance_threshold_alert": 0.8,
+                "importance_threshold_summarize": 0.7
+            }
+        )
+        logger.info(f"Email agent created and registered: {agent.name}")
+        return agent
+    except ValueError as e:
+        # Likely duplicate name (race condition) - try to fetch again
+        logger.warning(f"Duplicate agent creation attempt: {e}")
+        existing_agent = await registry.get_agent_by_name("Email Intelligence Agent")
+        if existing_agent:
+            logger.info(f"Retrieved existing email agent after duplicate error: {existing_agent.name}")
+            return existing_agent
+        raise

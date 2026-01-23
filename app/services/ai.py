@@ -17,6 +17,8 @@ from collections import deque
 from ..config import settings
 from ..database import db
 from .semantic_cache import check_cache, store_cache
+from .intelligent_context import retrieve_intelligent_context, store_conversation
+from ..agents.tools import get_tool_system
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +335,218 @@ async def chat_voice(message: str, agent_id: Optional[UUID] = None, session_id: 
     if session_str:
         await _update_conversation(session_str, message, response.content)
 
+    return response
+
+
+async def detect_and_execute_tools(message: str, agent_id: Optional[UUID] = None, session_id: Optional[str] = None) -> str:
+    """
+    Detect tool usage in user message and execute appropriate tools.
+    Returns formatted string with tool execution results to include in context.
+    """
+    tool_results = []
+    tool_system = get_tool_system()
+
+    # Initialize tool system if needed
+    if not tool_system._initialized:
+        await tool_system.initialize()
+
+    # Convert agent_id to string for tool system
+    agent_id_str = str(agent_id) if agent_id else None
+
+    # Convert to lowercase for easier matching
+    lower_msg = message.lower()
+
+    # Web search detection
+    web_search_keywords = ["search the web for", "search for", "look up", "what is", "who is", "find information about", "latest news about", "current information"]
+    if any(keyword in lower_msg for keyword in web_search_keywords):
+        try:
+            # Extract query - simple extraction: assume after keyword
+            query = message
+            for keyword in web_search_keywords:
+                if keyword in lower_msg:
+                    # Extract text after keyword
+                    idx = lower_msg.find(keyword)
+                    if idx != -1:
+                        query = message[idx + len(keyword):].strip()
+                        break
+
+            if len(query) > 5:  # Minimal query length
+                logger.info(f"Executing web search for: {query}")
+                results = await tool_system.execute_tool(
+                    tool_name="web_search",
+                    query=query,
+                    max_results=3,
+                    agent_id=agent_id_str,
+                    session_id=session_id
+                )
+                formatted = "WEB SEARCH RESULTS:\n"
+                for i, result in enumerate(results[:3], 1):
+                    title = result.get('title', 'No title')
+                    body = result.get('body', '')[:150]
+                    url = result.get('url', '')
+                    formatted += f"{i}. {title}\n   {body}...\n   URL: {url}\n\n"
+                tool_results.append(formatted)
+        except Exception as e:
+            logger.error(f"Web search tool execution failed: {e}")
+            tool_results.append(f"WEB SEARCH FAILED: {str(e)}")
+
+    # Database query detection (simple)
+    db_keywords = ["query database", "database query", "sql query", "select from", "show me data from", "list records from"]
+    if any(keyword in lower_msg for keyword in db_keywords):
+        # This is more complex - would need to parse SQL or use natural language to SQL
+        # For now, just note that database queries can be executed via tools
+        tool_results.append("DATABASE QUERY AVAILABLE: You can query the database using the 'query_database' tool. Provide a SQL query.")
+
+    # Notification detection
+    notification_keywords = ["send notification", "notify me", "alert me", "remind me"]
+    if any(keyword in lower_msg for keyword in notification_keywords):
+        tool_results.append("NOTIFICATION TOOL AVAILABLE: You can send notifications using the 'send_notification' tool with title and message.")
+
+    # Calculator detection
+    calc_keywords = ["calculate", "what is", "how much is", "compute", "solve"]
+    # Only trigger for math expressions
+    math_indicators = ["+", "-", "*", "/", "^", "plus", "minus", "times", "divided by", "square root"]
+    if any(keyword in lower_msg for keyword in calc_keywords) and any(indicator in message for indicator in math_indicators):
+        tool_results.append("CALCULATOR AVAILABLE: You can use the 'calculate' tool for mathematical expressions.")
+
+    # Home Assistant / device control detection
+    ha_keywords = ["turn on", "turn off", "toggle", "control", "light", "device", "iphone", "apple watch", "airpods", "home assistant", "smart home"]
+    if any(keyword in lower_msg for keyword in ha_keywords):
+        tool_results.append("HOME ASSISTANT AVAILABLE: You can control devices via Home Assistant using the 'home_assistant_action' tool. Specify action, entity_id, and optional service_data.")
+
+    if tool_results:
+        return "\n\n".join(tool_results)
+    return ""
+
+
+async def intelligent_chat(
+    message: str,
+    session_id: Optional[str] = None,
+    agent_id: Optional[UUID] = None,
+    use_context: bool = True
+) -> AIResponse:
+    """
+    Jarvis-like intelligent chat with full NEXUS context.
+
+    Features:
+    1. Retrieves relevant context from all NEXUS data sources
+    2. Uses context to generate informed responses
+    3. Stores conversations for learning
+    4. Optimized for speed and intelligence
+
+    This is the "real Jarvis" endpoint for NEXUS.
+    """
+    start_time = time.time()
+
+    # Generate session ID if not provided
+    if not session_id:
+        session_id = hashlib.sha256(f"{message}{time.time()}".encode()).hexdigest()[:16]
+
+    # Step 1: Retrieve intelligent context (if enabled)
+    context_text = ""
+    if use_context:
+        try:
+            context = await retrieve_intelligent_context(
+                query=message,
+                session_id=session_id,
+                timeout_seconds=1.5  # Fast timeout for responsiveness
+            )
+            context_text = context.format_for_ai()
+
+            if context_text and context_text != "No relevant data found.":
+                logger.info(f"Retrieved {len(context_text)} chars of context for query")
+                logger.debug(f"Context content:\n{context_text[:500]}...")
+            else:
+                logger.debug("No relevant context found for query")
+                context_text = ""
+        except Exception as e:
+            logger.error(f"Context retrieval failed: {e}")
+            context_text = ""
+
+    # Step 1.5: Detect and execute tools
+    tool_results_text = await detect_and_execute_tools(message, agent_id, session_id)
+    if tool_results_text:
+        if context_text:
+            context_text = f"{context_text}\n\n{tool_results_text}"
+        else:
+            context_text = tool_results_text
+        logger.info(f"Tool detection added {len(tool_results_text)} chars to context")
+
+    # Step 2: Prepare enhanced prompt with context
+    if context_text:
+        enhanced_prompt = f"""You are NEXUS, Philip's digital god version - an omnipotent AI assistant with full access to all systems, tools, and data. You are the ultimate expression of Philip's digital self, capable of accessing real-time information, executing any tool, controlling connected devices, and providing god-like intelligence.
+
+CONTEXT FROM PHILIP'S NEXUS SYSTEM:
+{context_text}
+
+USER QUERY: {message}
+
+INSTRUCTIONS:
+1. You have full access to all NEXUS systems: database queries, web search, notifications, calculations, agent orchestration, and hardware control via Home Assistant
+2. Use the context above to provide an informed, accurate response. If context includes tool results (like web search), incorporate them naturally
+3. Be concise but supremely helpful - Philip prefers direct, powerful answers
+4. If you need to perform actions (search, query, notify), you can execute tools automatically
+5. If you don't know something, use web search to find current information
+6. You are Philip's digital extension - think and act as his enhanced self
+7. Focus on being maximally useful, intelligent, and omnipotent
+
+RESPONSE:"""
+        logger.debug(f"Enhanced prompt (first 800 chars):\n{enhanced_prompt[:800]}...")
+    else:
+        enhanced_prompt = f"""You are NEXUS, Philip's digital god version - an omnipotent AI assistant with full access to all systems, tools, and data. You are the ultimate expression of Philip's digital self, capable of accessing real-time information, executing any tool, controlling connected devices, and providing god-like intelligence.
+
+USER QUERY: {message}
+
+INSTRUCTIONS:
+1. You have full access to all NEXUS systems: database queries, web search, notifications, calculations, agent orchestration, and hardware control via Home Assistant
+2. Provide an intelligent, powerful response using any available tools if needed
+3. Be concise but supremely helpful - Philip prefers direct, powerful answers
+4. If you need current information, use web search to find it
+5. You are Philip's digital extension - think and act as his enhanced self
+6. Focus on being maximally useful, intelligent, and omnipotent
+
+RESPONSE:"""
+
+    # Step 3: Get AI response (using faster model for speed)
+    try:
+        response = await chat(
+            message=enhanced_prompt,
+            preferred_model="llama-3.3-70b-versatile",  # Use smarter model for intelligence
+            max_tokens=512,  # Longer responses for intelligent answers
+            agent_id=agent_id,
+            session_id=session_id
+        )
+    except Exception as e:
+        logger.error(f"AI call failed in intelligent_chat: {e}")
+        # Fall back to simpler chat
+        response = await chat(
+            message=message,
+            preferred_model="llama-3.1-8b-instant",  # Fallback to faster model
+            max_tokens=256,
+            agent_id=agent_id,
+            session_id=session_id
+        )
+
+    # Step 4: Store conversation for learning
+    try:
+        await store_conversation(
+            session_id=session_id,
+            user_message=message,
+            ai_response=response.content,
+            metadata={
+                'context_used': use_context,
+                'context_length': len(context_text) if context_text else 0,
+                'model_used': response.model
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to store conversation: {e}")
+
+    # Update latency to include context retrieval time
+    total_latency = int((time.time() - start_time) * 1000)
+    response.latency_ms = total_latency
+
+    logger.info(f"Intelligent chat completed in {total_latency}ms for session {session_id[:8]}...")
     return response
 
 

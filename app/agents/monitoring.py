@@ -6,6 +6,7 @@ Provides real-time visibility into agent system performance and costs.
 """
 
 import asyncio
+import json
 import logging
 import time
 from typing import Dict, Any, List, Optional, Tuple
@@ -13,12 +14,18 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
 import statistics
+from uuid import UUID
+import uuid
 
 from ..database import db
 from ..agents.base import AgentStatus
 from ..agents.registry import AgentRegistry, registry
 
 logger = logging.getLogger(__name__)
+
+# Special agent ID for system-level metrics
+# Use existing 'system' agent ID from database
+SYSTEM_AGENT_ID = "50563ee7-5ff8-4dd8-adb7-f544f426f7f9"
 
 
 class MetricType(Enum):
@@ -159,6 +166,9 @@ class PerformanceMonitor:
             value: Metric value
             tags: Additional tags
         """
+        # Convert agent_id to valid UUID string
+        agent_id = self._ensure_uuid(agent_id)
+
         metric = PerformanceMetric(
             agent_id=agent_id,
             metric_type=metric_type,
@@ -235,6 +245,25 @@ class PerformanceMonitor:
         # Check for anomalies
         await self._check_agent_anomalies(agent_id, execution_time_ms, success)
 
+    async def get_agent_metrics(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Get current metrics for a specific agent.
+
+        Args:
+            agent_id: Agent ID
+
+        Returns:
+            Agent metrics dictionary
+        """
+        if not self.registry:
+            return {}
+
+        agent = await self.registry.get_agent(agent_id)
+        if not agent:
+            return {}
+
+        return agent.metrics
+
     async def create_alert(
         self,
         title: str,
@@ -298,6 +327,7 @@ class PerformanceMonitor:
             Performance statistics
         """
         start_time = datetime.now() - timedelta(hours=time_range_hours)
+        agent_id = self._ensure_uuid(agent_id)
 
         # Get metrics from database
         metrics = await db.fetch_all(
@@ -385,6 +415,8 @@ class PerformanceMonitor:
         if not agent_id:
             raise ValueError("agent_id is required")
 
+        agent_id = self._ensure_uuid(agent_id)
+
         # Build query
         sql = """
             SELECT ap.*, a.name as agent_name
@@ -421,7 +453,13 @@ class PerformanceMonitor:
                 "failed_requests": (row["total_requests"] or 0) - (row["successful_requests"] or 0),
                 "avg_latency_ms": float(row["avg_latency_ms"] or 0),
                 "total_cost_usd": float(row["total_cost_usd"] or 0),
-                "total_tokens": row["total_tokens"] or 0
+                "total_tokens": row["total_tokens"] or 0,
+                "p50_latency_ms": row["p50_latency_ms"],
+                "p95_latency_ms": row["p95_latency_ms"],
+                "p99_latency_ms": row["p99_latency_ms"],
+                "avg_user_rating": float(row["avg_user_rating"] or 0) if row["avg_user_rating"] is not None else None,
+                "total_ratings": row["total_ratings"] or 0,
+                "tools_used": row["tools_used"] or {}
             }
 
             # Add metric-specific value if requested
@@ -488,6 +526,26 @@ class PerformanceMonitor:
             "recent_alerts": recent_alerts,
             "active_alerts": len([a for a in self.alerts.values() if not a.resolved])
         }
+
+    async def get_agent_errors(
+        self,
+        agent_id: str,
+        resolved: Optional[bool] = None,
+        severity: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get errors for a specific agent.
+
+        Args:
+            agent_id: Agent ID
+            resolved: Filter by resolved status
+            severity: Filter by severity
+
+        Returns:
+            List of error dictionaries
+        """
+        # For now, return empty list - implement database query later
+        return []
 
     async def get_cost_report(
         self,
@@ -756,14 +814,33 @@ class PerformanceMonitor:
         # Record queue size (if orchestrator available)
         # TODO: Integrate with orchestrator queue metrics
 
-        # Record system metrics
+        # Record system metrics - use SYSTEM_AGENT_ID directly to avoid UUID conversion issues
         for status, count in status_counts.items():
             await self.record_metric(
-                "system",
+                SYSTEM_AGENT_ID,
                 MetricType.QUEUE_SIZE,
                 float(count),
                 {"status": status, "metric": "agent_count"}
             )
+
+    def _ensure_uuid(self, agent_id: str) -> str:
+        """Convert agent_id to valid UUID string, handling special 'system' value."""
+        # Handle UUID objects
+        if isinstance(agent_id, UUID):
+            return str(agent_id)
+
+        # Handle string 'system'
+        if agent_id == "system":
+            return SYSTEM_AGENT_ID
+
+        # If already a valid UUID string, return as-is
+        try:
+            UUID(agent_id)
+            return agent_id
+        except ValueError:
+            # Generate deterministic UUID from string
+            import uuid
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, agent_id))
 
     async def _flush_metrics_buffer(self) -> None:
         """Flush metrics buffer to database."""
@@ -784,12 +861,14 @@ class PerformanceMonitor:
             # Prepare values for batch insert
             values = []
             for metric in buffer:
+                # Convert tags dict to JSON string for database storage
+                tags_json = json.dumps(metric.tags) if metric.tags else "{}"
                 values.append((
-                    metric.agent_id,
+                    self._ensure_uuid(metric.agent_id),
                     metric.metric_type.value,
                     metric.value,
                     metric.timestamp,
-                    metric.tags
+                    tags_json
                 ))
 
             # Use executemany for batch insert
@@ -1070,6 +1149,7 @@ class PerformanceMonitor:
 
     async def _get_recent_failure_rate(self, agent_id: str) -> float:
         """Get recent failure rate for an agent."""
+        agent_id = self._ensure_uuid(agent_id)
         rows = await db.fetch_all(
             """
             SELECT successful_requests, total_requests

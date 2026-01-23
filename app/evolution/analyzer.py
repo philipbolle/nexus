@@ -152,7 +152,7 @@ class PerformanceAnalyzer:
             ORDER BY date, agent_id
         """
 
-        rows = await self.db.fetch(query, start_date, end_date)
+        rows = await self.db.fetch_all(query, start_date, end_date)
 
         if not rows:
             return {"data_available": False, "message": "No agent performance data"}
@@ -281,7 +281,7 @@ class PerformanceAnalyzer:
             ORDER BY total_cost DESC
         """
 
-        rows = await self.db.fetch(query, start_date, end_date)
+        rows = await self.db.fetch_all(query, start_date, end_date)
 
         if not rows:
             return {"data_available": False, "message": "No API usage data"}
@@ -354,7 +354,7 @@ class PerformanceAnalyzer:
             ORDER BY collected_at
         """
 
-        rows = await self.db.fetch(query, start_date, end_date)
+        rows = await self.db.fetch_all(query, start_date, end_date)
 
         if not rows:
             return {"data_available": False, "message": "No system metrics data"}
@@ -441,7 +441,7 @@ class PerformanceAnalyzer:
             ORDER BY date
         """
 
-        rows = await self.db.fetch(query, start_date, end_date)
+        rows = await self.db.fetch_all(query, start_date, end_date)
 
         if not rows:
             return {"data_available": False, "message": "No cost data"}
@@ -506,7 +506,7 @@ class PerformanceAnalyzer:
             ORDER BY avg_latency DESC
         """
 
-        rows = await self.db.fetch(query, start_date, end_date)
+        rows = await self.db.fetch_all(query, start_date, end_date)
 
         if not rows:
             return {"data_available": False, "message": "No latency data"}
@@ -561,7 +561,7 @@ class PerformanceAnalyzer:
             GROUP BY agent_id
         """
 
-        rows = await self.db.fetch(query, start_date, end_date)
+        rows = await self.db.fetch_all(query, start_date, end_date)
 
         if not rows:
             return {"data_available": False, "message": "No error rate data"}

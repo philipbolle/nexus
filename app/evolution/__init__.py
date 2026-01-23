@@ -9,10 +9,12 @@ from .analyzer import PerformanceAnalyzer
 from .hypothesis import HypothesisGenerator
 from .experiments import ExperimentManager
 from .refactor import CodeRefactor
+from .test_generator import TestGenerator
 
 __all__ = [
     "PerformanceAnalyzer",
     "HypothesisGenerator",
     "ExperimentManager",
-    "CodeRefactor"
+    "CodeRefactor",
+    "TestGenerator"
 ]

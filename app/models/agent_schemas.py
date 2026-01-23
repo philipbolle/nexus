@@ -232,8 +232,8 @@ class AgentPerformanceResponse(BaseModel):
     p95_latency_ms: Optional[int]
     p99_latency_ms: Optional[int]
     avg_user_rating: Optional[float]
-    total_ratings: int
-    tools_used: Dict[str, int]
+    total_ratings: int = 0
+    tools_used: Dict[str, int] = Field(default_factory=dict)
 
 
 # ============ Agent Delegation Models ============

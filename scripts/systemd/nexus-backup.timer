@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily backup timer for NEXUS
+Requires=nexus-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target

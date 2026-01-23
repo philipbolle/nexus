@@ -16,6 +16,7 @@ from enum import Enum
 
 from ..database import db
 from ..agents.base import BaseAgent
+from ..services.ai_providers import ai_request, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,11 @@ class SessionConfig:
     allow_agent_switching: bool = True
     enable_cost_tracking: bool = True
     enable_message_history: bool = True
+    # Memory retention policies
+    memory_retention_days: int = 30  # How long to keep session in memory system
+    store_summary_in_memory: bool = True  # Whether to store AI summary in memory system
+    enable_session_analytics: bool = True  # Whether to generate analytics
+    auto_generate_summary: bool = True  # Whether to auto-generate AI summary on session end
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -110,7 +116,8 @@ class SessionManager:
         self,
         title: str,
         primary_agent_id: Optional[str] = None,
-        config: Optional[SessionConfig] = None
+        config: Optional[SessionConfig] = None,
+        session_type: Optional[str] = None
     ) -> str:
         """
         Create a new session.
@@ -119,12 +126,21 @@ class SessionManager:
             title: Session title
             primary_agent_id: Primary agent for the session
             config: Session configuration
+            session_type: Override session type (string)
 
         Returns:
             Session ID
         """
         session_id = str(uuid.uuid4())
         session_config = config or SessionConfig()
+
+        # Override session_type if provided
+        if session_type:
+            try:
+                session_config.session_type = SessionType(session_type)
+            except ValueError:
+                logger.warning(f"Invalid session type '{session_type}', defaulting to CHAT")
+                session_config.session_type = SessionType.CHAT
 
         logger.info(f"Creating session {session_id}: {title}")
 
@@ -144,7 +160,7 @@ class SessionManager:
                 primary_agent_id,
                 [primary_agent_id] if primary_agent_id else [],
                 SessionStatus.ACTIVE.value,
-                session_config.metadata or {}
+                json.dumps(session_config.metadata or {})
             )
 
             # Create in-memory session record
@@ -294,7 +310,24 @@ class SessionManager:
         """
         # Check active sessions first
         if session_id in self.active_sessions:
-            return self.active_sessions[session_id]
+            session = self.active_sessions[session_id]
+            # Convert active session format to match SessionResponse schema
+            return {
+                "id": session["id"],
+                "session_type": session.get("type", session.get("session_type", "chat")),
+                "title": session.get("title", ""),
+                "summary": session.get("summary"),
+                "primary_agent_id": session.get("primary_agent_id"),
+                "agents_involved": session.get("agents_involved", []),
+                "total_messages": session.get("message_count", session.get("total_messages", 0)),
+                "total_tokens": session.get("total_tokens", 0),
+                "total_cost_usd": session.get("total_cost_usd", 0.0),
+                "status": session.get("status", "active"),
+                "started_at": session.get("created_at", session.get("started_at", datetime.now())),
+                "last_message_at": session.get("last_message_at"),
+                "ended_at": session.get("ended_at"),
+                "metadata": session.get("metadata", {})
+            }
 
         # Try to load from database
         return await self._load_session_from_db(session_id)
@@ -342,7 +375,7 @@ class SessionManager:
                     "content": row["content"],
                     "agent_id": row["agent_id"],
                     "parent_message_id": row["parent_message_id"],
-                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "created_at": row["created_at"],
                     "tokens_input": row["tokens_input"],
                     "tokens_output": row["tokens_output"],
                     "cost_usd": float(row["cost_usd"]) if row["cost_usd"] else None,
@@ -361,6 +394,22 @@ class SessionManager:
         except Exception as e:
             logger.error(f"Failed to get messages for session {session_id}: {e}")
             return []
+
+    async def get_messages(
+        self,
+        session_id: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all messages for a session (legacy API compatibility).
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            List of messages or empty list if session not found
+        """
+        # Use the existing get_session_messages with default parameters
+        return await self.get_session_messages(session_id)
 
     async def update_session(
         self,
@@ -666,32 +715,43 @@ class SessionManager:
                 param_index += 1
 
             if agent_id:
-                query += f" AND $${param_index} = ANY(agents_involved)"
+                query += f" AND ${param_index} = ANY(agents_involved)"
                 params.append(agent_id)
                 param_index += 1
 
-            query += f" ORDER BY last_message_at DESC LIMIT ${param_index} OFFSET $${param_index + 1}"
+            query += f" ORDER BY last_message_at DESC LIMIT ${param_index} OFFSET ${param_index + 1}"
             params.extend([limit, offset])
 
             rows = await db.fetch_all(query, *params)
 
             sessions = []
             for row in rows:
+                # Convert metadata from string to dict if needed
+                metadata = row["metadata"]
+                if isinstance(metadata, str):
+                    try:
+                        metadata = json.loads(metadata) if metadata else {}
+                    except json.JSONDecodeError:
+                        metadata = {}
+
+                # Ensure agents_involved is a list
+                agents_involved = row["agents_involved"] or []
+
                 session = {
                     "id": row["id"],
-                    "type": row["session_type"],
-                    "title": row["title"],
+                    "session_type": row["session_type"],
+                    "title": row["title"] or "",
                     "summary": row["summary"],
                     "primary_agent_id": row["primary_agent_id"],
-                    "agents_involved": row["agents_involved"],
+                    "agents_involved": agents_involved,
                     "total_messages": row["total_messages"],
                     "total_tokens": row["total_tokens"],
                     "total_cost_usd": float(row["total_cost_usd"] or 0),
                     "status": row["status"],
-                    "started_at": row["started_at"].isoformat() if row["started_at"] else None,
-                    "last_message_at": row["last_message_at"].isoformat() if row["last_message_at"] else None,
-                    "ended_at": row["ended_at"].isoformat() if row["ended_at"] else None,
-                    "metadata": row["metadata"]
+                    "started_at": row["started_at"],
+                    "last_message_at": row["last_message_at"],
+                    "ended_at": row["ended_at"],
+                    "metadata": metadata
                 }
                 sessions.append(session)
 
@@ -769,27 +829,35 @@ class SessionManager:
             if not row:
                 return None
 
-            # Create config from metadata
-            metadata = row["metadata"] or {}
-            config = SessionConfig(
-                session_type=SessionType(row["session_type"]),
-                metadata=metadata
-            )
+            # Convert metadata from string to dict if needed (same as list_sessions)
+            metadata = row["metadata"]
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata) if metadata else {}
+                except json.JSONDecodeError:
+                    metadata = {}
+
+            # Ensure metadata is a dict
+            if not isinstance(metadata, dict):
+                metadata = {}
+
+            # Ensure agents_involved is a list
+            agents_involved = row["agents_involved"] or []
 
             return {
                 "id": row["id"],
-                "title": row["title"],
-                "type": row["session_type"],
+                "session_type": row["session_type"],
+                "title": row["title"] or "",
+                "summary": row["summary"],
                 "primary_agent_id": row["primary_agent_id"],
-                "agents_involved": row["agents_involved"],
-                "config": config,
-                "message_count": row["total_messages"],
+                "agents_involved": agents_involved,
+                "total_messages": row["total_messages"],
                 "total_tokens": row["total_tokens"],
                 "total_cost_usd": float(row["total_cost_usd"] or 0),
-                "created_at": row["started_at"],
+                "status": row["status"],
+                "started_at": row["started_at"],
                 "last_message_at": row["last_message_at"],
                 "ended_at": row["ended_at"],
-                "status": row["status"],
                 "metadata": metadata
             }
 
@@ -890,12 +958,212 @@ class SessionManager:
 
     async def _generate_session_summary(self, session_id: str) -> None:
         """Generate AI summary for a completed session."""
-        # TODO: Implement AI-powered session summarization
-        # For now, generate basic summary
         try:
-            messages = await self.get_session_messages(session_id, limit=20)
+            messages = await self.get_session_messages(session_id, limit=50)
             if not messages:
                 return
+
+            # Prepare conversation text for AI summarization
+            conversation_text = ""
+            for msg in messages:
+                role = msg["role"]
+                content = msg["content"]
+                # Truncate very long messages
+                if len(content) > 500:
+                    content = content[:500] + "..."
+                conversation_text += f"{role}: {content}\n\n"
+
+            # Get session metadata for context
+            session = await self.get_session(session_id)
+            if not session:
+                return
+
+            session_type = session.get("session_type", "chat")
+            primary_agent = session.get("primary_agent_id", "unknown")
+
+            # Create AI prompt for summarization
+            prompt = f"""Please summarize the following {session_type} session with agent {primary_agent}.
+
+Conversation:
+{conversation_text}
+
+Please provide a concise summary (2-3 sentences) that captures:
+1. The main topic or purpose of the session
+2. Key decisions or outcomes
+3. Any important actions or next steps
+
+Summary:"""
+
+            # Use AI to generate summary
+            ai_response = await ai_request(
+                task_type=TaskType.SUMMARIZATION,
+                prompt=prompt,
+                max_tokens=200,
+                temperature=0.3
+            )
+
+            summary = ai_response.get("content", "").strip()
+            if not summary:
+                # Fallback to basic summary if AI fails
+                role_counts = {}
+                for msg in messages:
+                    role = msg["role"]
+                    role_counts[role] = role_counts.get(role, 0) + 1
+                summary = f"Session with {len(messages)} messages "
+                summary += f"({', '.join(f'{count} {role}' for role, count in role_counts.items())})"
+
+            # Store summary in session
+            await self.update_session(session_id, summary=summary)
+
+            # Also store summary in memory system for future reference
+            try:
+                from ..agents.memory import memory_system, MemoryType
+                await memory_system.store_memory(
+                    agent_id=primary_agent,
+                    content=f"Session summary: {summary}",
+                    memory_type=MemoryType.EPISODIC,
+                    metadata={
+                        "session_id": session_id,
+                        "session_type": session_type,
+                        "summary_source": "ai_generated"
+                    }
+                )
+            except ImportError:
+                logger.warning("Memory system not available for storing session summary")
+
+            logger.info(f"Generated AI summary for session {session_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to generate session summary for {session_id}: {e}")
+            # Fallback to basic summary on error
+            try:
+                messages = await self.get_session_messages(session_id, limit=20)
+                if messages:
+                    role_counts = {}
+                    for msg in messages:
+                        role = msg["role"]
+                        role_counts[role] = role_counts.get(role, 0) + 1
+                    summary = f"Session with {len(messages)} messages "
+                    summary += f"({', '.join(f'{count} {role}' for role, count in role_counts.items())})"
+                    await self.update_session(session_id, summary=summary)
+            except Exception as fallback_error:
+                logger.error(f"Fallback summary generation also failed: {fallback_error}")
+
+    async def analyze_session_topics(self, session_id: str) -> List[str]:
+        """Analyze session messages to extract key topics."""
+        try:
+            messages = await self.get_session_messages(session_id, limit=50)
+            if not messages:
+                return []
+
+            # Combine message content for topic analysis
+            conversation_text = "\n".join([
+                f"{msg['role']}: {msg['content'][:200]}"
+                for msg in messages if msg.get("content")
+            ])
+
+            prompt = f"""Analyze the following conversation and extract 3-5 key topics or themes.
+
+Conversation:
+{conversation_text}
+
+Please list the key topics as a bulleted list. Focus on main subjects, tasks, or themes discussed.
+
+Key topics:"""
+
+            ai_response = await ai_request(
+                task_type=TaskType.ANALYSIS,
+                prompt=prompt,
+                max_tokens=150,
+                temperature=0.2
+            )
+
+            topics_text = ai_response.get("content", "").strip()
+            # Parse bullet points or numbered lists
+            topics = []
+            for line in topics_text.split("\n"):
+                line = line.strip()
+                if line.startswith("- ") or line.startswith("* "):
+                    topics.append(line[2:].strip())
+                elif line.startswith("• "):
+                    topics.append(line[2:].strip())
+                elif line and not line.startswith("Key topics"):
+                    topics.append(line)
+
+            return topics[:5]  # Limit to top 5 topics
+
+        except Exception as e:
+            logger.error(f"Failed to analyze topics for session {session_id}: {e}")
+            return []
+
+    async def analyze_session_sentiment(self, session_id: str) -> Dict[str, Any]:
+        """Analyze overall sentiment of a session."""
+        try:
+            messages = await self.get_session_messages(session_id, limit=50)
+            if not messages:
+                return {"sentiment": "neutral", "score": 0.0, "confidence": 0.0}
+
+            # Combine message content for sentiment analysis
+            conversation_text = "\n".join([
+                msg["content"][:500] for msg in messages if msg.get("content")
+            ])
+
+            prompt = f"""Analyze the sentiment of the following conversation.
+
+Conversation:
+{conversation_text}
+
+Please provide a sentiment analysis with:
+1. Overall sentiment (positive, negative, neutral, mixed)
+2. Sentiment score from -1.0 (very negative) to 1.0 (very positive)
+3. Confidence score from 0.0 to 1.0
+
+Respond in JSON format: {{"sentiment": "...", "score": 0.0, "confidence": 0.0}}"""
+
+            ai_response = await ai_request(
+                task_type=TaskType.ANALYSIS,
+                prompt=prompt,
+                max_tokens=200,
+                temperature=0.1
+            )
+
+            sentiment_text = ai_response.get("content", "").strip()
+
+            # Try to parse JSON response
+            try:
+                import json
+                sentiment_data = json.loads(sentiment_text)
+                return sentiment_data
+            except json.JSONDecodeError:
+                # Fallback: simple keyword detection
+                text_lower = conversation_text.lower()
+                positive_words = ["good", "great", "excellent", "thanks", "thank you", "helpful", "perfect"]
+                negative_words = ["bad", "wrong", "error", "failed", "issue", "problem", "sorry"]
+
+                positive_count = sum(1 for word in positive_words if word in text_lower)
+                negative_count = sum(1 for word in negative_words if word in text_lower)
+
+                if positive_count > negative_count:
+                    return {"sentiment": "positive", "score": 0.5, "confidence": 0.7}
+                elif negative_count > positive_count:
+                    return {"sentiment": "negative", "score": -0.5, "confidence": 0.7}
+                else:
+                    return {"sentiment": "neutral", "score": 0.0, "confidence": 0.7}
+
+        except Exception as e:
+            logger.error(f"Failed to analyze sentiment for session {session_id}: {e}")
+            return {"sentiment": "neutral", "score": 0.0, "confidence": 0.0}
+
+    async def get_session_analytics(self, session_id: str) -> Dict[str, Any]:
+        """Get comprehensive analytics for a session."""
+        try:
+            session = await self.get_session(session_id)
+            if not session:
+                return {}
+
+            # Get basic session stats
+            messages = await self.get_session_messages(session_id)
+            total_messages = len(messages)
 
             # Count messages by role
             role_counts = {}
@@ -903,13 +1171,104 @@ class SessionManager:
                 role = msg["role"]
                 role_counts[role] = role_counts.get(role, 0) + 1
 
-            summary = f"Session with {len(messages)} messages "
-            summary += f"({', '.join(f'{count} {role}' for role, count in role_counts.items())})"
+            # Get AI-powered analytics (async parallel)
+            topics_task = self.analyze_session_topics(session_id)
+            sentiment_task = self.analyze_session_sentiment(session_id)
 
-            await self.update_session(session_id, summary=summary)
+            topics, sentiment = await asyncio.gather(
+                topics_task,
+                sentiment_task,
+                return_exceptions=True
+            )
+
+            # Handle exceptions in parallel tasks
+            if isinstance(topics, Exception):
+                logger.error(f"Topic analysis failed: {topics}")
+                topics = []
+            if isinstance(sentiment, Exception):
+                logger.error(f"Sentiment analysis failed: {sentiment}")
+                sentiment = {"sentiment": "neutral", "score": 0.0, "confidence": 0.0}
+
+            analytics = {
+                "session_id": session_id,
+                "total_messages": total_messages,
+                "role_counts": role_counts,
+                "duration_minutes": session.get("duration_minutes", 0),
+                "total_cost_usd": session.get("total_cost_usd", 0.0),
+                "total_tokens": session.get("total_tokens", 0),
+                "topics": topics if not isinstance(topics, Exception) else [],
+                "sentiment": sentiment if not isinstance(sentiment, Exception) else {"sentiment": "neutral", "score": 0.0, "confidence": 0.0},
+                "agents_involved": session.get("agents_involved", []),
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return analytics
 
         except Exception as e:
-            logger.error(f"Failed to generate session summary for {session_id}: {e}")
+            logger.error(f"Failed to get analytics for session {session_id}: {e}")
+            return {}
+
+    async def export_session(self, session_id: str, include_messages: bool = True, include_analytics: bool = True) -> Dict[str, Any]:
+        """Export session data to JSON-serializable format."""
+        try:
+            session = await self.get_session(session_id)
+            if not session:
+                return {"error": f"Session {session_id} not found"}
+
+            export_data = {
+                "session_id": session_id,
+                "metadata": {
+                    "title": session.get("title", ""),
+                    "session_type": session.get("session_type", ""),
+                    "status": session.get("status", ""),
+                    "primary_agent_id": session.get("primary_agent_id"),
+                    "agents_involved": session.get("agents_involved", []),
+                    "summary": session.get("summary", ""),
+                    "started_at": session.get("started_at", ""),
+                    "ended_at": session.get("ended_at"),
+                    "duration_minutes": session.get("duration_minutes", 0),
+                    "total_messages": session.get("total_messages", 0),
+                    "total_tokens": session.get("total_tokens", 0),
+                    "total_cost_usd": session.get("total_cost_usd", 0.0),
+                    "metadata": session.get("metadata", {})
+                }
+            }
+
+            if include_messages:
+                messages = await self.get_session_messages(session_id, limit=1000)
+                # Convert messages to serializable format
+                serializable_messages = []
+                for msg in messages:
+                    serializable_msg = {
+                        "id": msg.get("id"),
+                        "role": msg.get("role"),
+                        "content": msg.get("content", ""),
+                        "agent_id": msg.get("agent_id"),
+                        "parent_message_id": msg.get("parent_message_id"),
+                        "tool_calls": msg.get("tool_calls"),
+                        "tool_results": msg.get("tool_results"),
+                        "tokens_input": msg.get("tokens_input"),
+                        "tokens_output": msg.get("tokens_output"),
+                        "cost_usd": msg.get("cost_usd"),
+                        "model_used": msg.get("model_used"),
+                        "latency_ms": msg.get("latency_ms"),
+                        "created_at": msg.get("created_at")
+                    }
+                    serializable_messages.append(serializable_msg)
+                export_data["messages"] = serializable_messages
+
+            if include_analytics:
+                analytics = await self.get_session_analytics(session_id)
+                export_data["analytics"] = analytics
+
+            export_data["export_timestamp"] = datetime.now().isoformat()
+            export_data["export_version"] = "1.0"
+
+            return export_data
+
+        except Exception as e:
+            logger.error(f"Failed to export session {session_id}: {e}")
+            return {"error": str(e)}
 
 
 # Global session manager instance

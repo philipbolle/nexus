@@ -10,6 +10,7 @@ import logging
 import tempfile
 import shutil
 import os
+import libcst as cst
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 import uuid
@@ -18,6 +19,7 @@ from enum import Enum
 
 from ..database import Database
 from ..config import settings
+from .test_generator import TestGenerator
 
 
 class RefactorType(Enum):
@@ -46,6 +48,7 @@ class CodeRefactor:
         self.db = database
         self.logger = logging.getLogger(__name__)
         self.project_root = Path(__file__).parent.parent.parent
+        self.test_generator = TestGenerator(database)
 
     async def propose_refactor(
         self,
@@ -758,7 +761,9 @@ class CodeRefactor:
                                     content = f.read().lower()
                                     if component_lower in content:
                                         files.append(relative_path)
-                            except:
+                            except (IOError, OSError, UnicodeDecodeError) as e:
+                                # Log at debug level since failing to read some files is expected
+                                self.logger.debug(f"Could not read file {file_path}: {e}")
                                 pass
 
         except Exception as e:
@@ -899,8 +904,10 @@ class CodeRefactor:
     async def _run_tests(self, directory: str) -> bool:
         """Run tests in directory."""
         # Simplified test runner
+        import subprocess
+        import sys
+
         try:
-            import subprocess
             result = subprocess.run(
                 ["python", "-m", "pytest", "--tb=short"],
                 cwd=directory,
@@ -909,15 +916,16 @@ class CodeRefactor:
                 timeout=60
             )
             return result.returncode == 0
-        except:
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
             # If pytest fails or isn't available, try basic import test
+            self.logger.debug(f"Test runner failed, trying import test: {e}")
             try:
                 # Try to import main modules
-                import sys
                 sys.path.insert(0, directory)
                 import app
                 return True
-            except:
+            except ImportError as import_err:
+                self.logger.debug(f"Import test also failed: {import_err}")
                 return False
 
     async def _analyze_performance_impact(self, directory: str) -> str:
@@ -1049,7 +1057,7 @@ class CodeRefactor:
         """Retrieve refactoring proposal from database."""
         try:
             query = "SELECT * FROM refactoring_proposals WHERE id = $1"
-            row = await self.db.fetchrow(query, refactor_id)
+            row = await self.db.fetch_one(query, refactor_id)
             return dict(row) if row else None
         except Exception as e:
             self.logger.error(f"Failed to get refactor proposal: {e}")

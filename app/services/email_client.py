@@ -4,9 +4,13 @@ Connect to Gmail and iCloud via IMAP.
 """
 
 import imaplib
+import smtplib
+import ssl
 import email
 from email.header import decode_header
-from email.utils import parsedate_to_datetime
+from email.utils import parsedate_to_datetime, formatdate
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -38,12 +42,20 @@ EMAIL_ACCOUNTS = {
     "gmail": {
         "imap_server": "imap.gmail.com",
         "imap_port": 993,
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_use_tls": True,
+        "smtp_use_ssl": False,
         "email_env": "gmail_email",
         "password_env": "gmail_app_password"
     },
     "icloud": {
         "imap_server": "imap.mail.me.com",
         "imap_port": 993,
+        "smtp_server": "smtp.mail.me.com",
+        "smtp_port": 587,
+        "smtp_use_tls": True,
+        "smtp_use_ssl": False,
         "email_env": "icloud_email",
         "password_env": "icloud_app_password"
     }
@@ -60,7 +72,7 @@ def decode_mime_header(header: str) -> str:
         if isinstance(part, bytes):
             try:
                 result.append(part.decode(encoding or 'utf-8', errors='replace'))
-            except:
+            except (UnicodeDecodeError, LookupError):
                 result.append(part.decode('utf-8', errors='replace'))
         else:
             result.append(part)
@@ -99,7 +111,7 @@ def get_email_body(msg) -> tuple:
                     body = payload.decode(charset, errors='replace')
                     is_html = False
                     break  # Prefer plain text
-                except:
+                except (UnicodeDecodeError, LookupError, ValueError):
                     continue
             elif content_type == "text/html" and not body:
                 try:
@@ -107,7 +119,7 @@ def get_email_body(msg) -> tuple:
                     charset = part.get_content_charset() or 'utf-8'
                     body = payload.decode(charset, errors='replace')
                     is_html = True
-                except:
+                except Exception:
                     continue
     else:
         try:
@@ -115,7 +127,7 @@ def get_email_body(msg) -> tuple:
             charset = msg.get_content_charset() or 'utf-8'
             body = payload.decode(charset, errors='replace')
             is_html = msg.get_content_type() == "text/html"
-        except:
+        except Exception:
             body = str(msg.get_payload())
 
     # Clean HTML if needed
@@ -219,7 +231,7 @@ async def fetch_emails(
                 # Parse date
                 try:
                     received_at = parsedate_to_datetime(date_header)
-                except:
+                except Exception:
                     received_at = datetime.now()
 
                 # Get body
@@ -246,7 +258,7 @@ async def fetch_emails(
     finally:
         try:
             imap.logout()
-        except:
+        except Exception:
             pass
 
     return emails
@@ -312,7 +324,7 @@ async def archive_email(account: str, message_id: str) -> bool:
     finally:
         try:
             imap.logout()
-        except:
+        except Exception:
             pass
 
 
@@ -346,7 +358,7 @@ async def delete_email(account: str, message_id: str) -> bool:
     finally:
         try:
             imap.logout()
-        except:
+        except Exception:
             pass
 
 
@@ -375,5 +387,111 @@ async def mark_as_read(account: str, message_id: str) -> bool:
     finally:
         try:
             imap.logout()
-        except:
+        except Exception:
             pass
+
+
+async def send_email(
+    account: str,
+    to_addresses: List[str],
+    subject: str,
+    body: str,
+    cc_addresses: Optional[List[str]] = None,
+    bcc_addresses: Optional[List[str]] = None,
+    is_html: bool = False,
+    reply_to: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Send an email using SMTP.
+
+    Args:
+        account: 'gmail' or 'icloud'
+        to_addresses: List of recipient email addresses
+        subject: Email subject
+        body: Email body content
+        cc_addresses: Optional CC recipients
+        bcc_addresses: Optional BCC recipients
+        is_html: Whether body is HTML (default: False)
+        reply_to: Optional reply-to address
+
+    Returns:
+        Dictionary with success status and message ID
+    """
+    config = EMAIL_ACCOUNTS.get(account)
+    if not config:
+        logger.error(f"Unknown email account: {account}")
+        return {"success": False, "error": f"Unknown account: {account}"}
+
+    email_addr = getattr(settings, config["email_env"], None)
+    password = getattr(settings, config["password_env"], None)
+
+    if not email_addr or not password:
+        logger.warning(f"Credentials not configured for {account}")
+        return {"success": False, "error": f"Credentials not configured for {account}"}
+
+    smtp_server = config.get("smtp_server")
+    smtp_port = config.get("smtp_port", 587)
+    smtp_use_tls = config.get("smtp_use_tls", True)
+    smtp_use_ssl = config.get("smtp_use_ssl", False)
+
+    if not smtp_server:
+        logger.error(f"SMTP server not configured for {account}")
+        return {"success": False, "error": f"SMTP server not configured for {account}"}
+
+    # Create message
+    msg = MIMEMultipart('alternative' if is_html else 'mixed')
+    msg['From'] = email_addr
+    msg['To'] = ', '.join(to_addresses)
+    msg['Subject'] = subject
+    msg['Date'] = formatdate(localtime=True)
+
+    if cc_addresses:
+        msg['Cc'] = ', '.join(cc_addresses)
+
+    if reply_to:
+        msg['Reply-To'] = reply_to
+
+    # Add body
+    body_part = MIMEText(body, 'html' if is_html else 'plain', 'utf-8')
+    msg.attach(body_part)
+
+    # Combine all recipients
+    all_recipients = to_addresses.copy()
+    if cc_addresses:
+        all_recipients.extend(cc_addresses)
+    if bcc_addresses:
+        all_recipients.extend(bcc_addresses)
+
+    try:
+        # Connect to SMTP server
+        if smtp_use_ssl:
+            context = ssl.create_default_context()
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port, context=context)
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port)
+
+        # Start TLS if requested (and not using SSL)
+        if smtp_use_tls and not smtp_use_ssl:
+            server.starttls()
+
+        # Login
+        server.login(email_addr, password)
+
+        # Send email
+        server.sendmail(email_addr, all_recipients, msg.as_string())
+        server.quit()
+
+        # Generate a simple message ID for tracking
+        message_id = f"<{datetime.now().timestamp()}.{email_addr}>"
+
+        logger.info(f"Email sent successfully from {account} to {len(all_recipients)} recipients")
+        return {
+            "success": True,
+            "message_id": message_id,
+            "account": account,
+            "recipients": all_recipients
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return {"success": False, "error": str(e)}

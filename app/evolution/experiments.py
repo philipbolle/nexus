@@ -459,11 +459,7 @@ class ExperimentManager:
             base_query += f" ORDER BY created_at DESC LIMIT ${param_count + 1}"
             params.append(limit)
 
-            rows = await self.db.fetch(base_query, *params)
-
-            experiments = []
-            for row in rows:
-                experiments.append(dict(row))
+            experiments = await self.db.fetch_all(base_query, *params)
 
             return experiments
         except Exception as e:
@@ -537,7 +533,7 @@ class ExperimentManager:
         """Retrieve experiment from database."""
         try:
             query = "SELECT * FROM agent_experiments WHERE id = $1"
-            row = await self.db.fetchrow(query, experiment_id)
+            row = await self.db.fetch_one(query, experiment_id)
             return dict(row) if row else None
         except Exception as e:
             self.logger.error(f"Failed to get experiment: {e}")
@@ -580,7 +576,7 @@ class ExperimentManager:
                   AND entity_type = $3
                 LIMIT 1
             """
-            row = await self.db.fetchrow(query, experiment_id, entity_id, entity_type)
+            row = await self.db.fetch_one(query, experiment_id, entity_id, entity_type)
             return dict(row) if row else None
         except Exception as e:
             self.logger.error(f"Failed to get assignment: {e}")
@@ -623,7 +619,7 @@ class ExperimentManager:
                       AND assignment_group = $2
                       AND timestamp >= CURRENT_DATE - INTERVAL '7 days'
                 """
-                row = await self.db.fetchrow(query, experiment_id, group)
+                row = await self.db.fetch_one(query, experiment_id, group)
 
                 if row:
                     metrics[group] = {

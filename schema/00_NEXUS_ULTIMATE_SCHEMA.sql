@@ -2485,8 +2485,20 @@ CREATE TABLE email_accounts (
     last_synced_at TIMESTAMPTZ,
     sync_enabled BOOLEAN DEFAULT true,
     folders_to_sync TEXT[],
+    -- SMTP Configuration for sending emails
+    smtp_server VARCHAR(255),
+    smtp_port INTEGER DEFAULT 587,
+    smtp_username VARCHAR(255),
+    smtp_password TEXT,
+    smtp_use_tls BOOLEAN DEFAULT true,
+    smtp_use_ssl BOOLEAN DEFAULT false,
+    smtp_auth_method VARCHAR(50) DEFAULT 'password',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Index for active accounts with SMTP configured
+CREATE INDEX idx_email_accounts_active_smtp ON email_accounts(is_active, smtp_server)
+WHERE is_active = true AND smtp_server IS NOT NULL;
 
 -- 12.4 Emails
 CREATE TABLE emails (

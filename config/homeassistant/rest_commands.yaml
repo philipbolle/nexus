@@ -1,0 +1,72 @@
+# NEXUS REST Commands for Home Assistant
+# Allows calling NEXUS APIs from automations and scripts
+
+rest_command:
+
+  # System Commands
+  nexus_check_status:
+    url: "http://100.68.201.55:8080/status"
+    method: get
+    content_type: "application/json"
+
+  nexus_restart_services:
+    url: "http://100.68.201.55:8080/system/restart"
+    method: post
+    content_type: "application/json"
+    payload: '{"services": ["all"]}'
+
+  # Email Commands
+  nexus_scan_emails:
+    url: "http://100.68.201.55:8080/email/scan"
+    method: post
+    content_type: "application/json"
+    payload: '{"accounts": ["gmail", "icloud"]}'
+
+  nexus_generate_insights:
+    url: "http://100.68.201.55:8080/email/insights/generate"
+    method: post
+    content_type: "application/json"
+
+  # Finance Commands
+  nexus_log_expense:
+    url: "http://100.68.201.55:8080/finance/expense"
+    method: post
+    content_type: "application/json"
+    payload: '{"amount": "{{ amount }}", "category": "{{ category }}", "description": "{{ description }}"}'
+
+  # AI Commands
+  nexus_ask_ai:
+    url: "http://100.68.201.55:8080/chat"
+    method: post
+    content_type: "application/json"
+    payload: '{"message": "{{ message }}"}'
+
+  # n8n Workflow Triggers
+  nexus_photo_analysis:
+    url: "http://100.68.201.55:5678/webhook/photo-vision"
+    method: post
+    content_type: "application/json"
+    payload: '{"image": "{{ image }}", "prompt": "{{ prompt }}"}'
+
+  nexus_screenshot_helper:
+    url: "http://100.68.201.55:5678/webhook/screenshot-helper"
+    method: post
+    content_type: "application/json"
+    payload: '{"image": "{{ image }}", "prompt": "{{ prompt }}"}'
+
+  nexus_quick_capture:
+    url: "http://100.68.201.55:5678/webhook/quick-capture"
+    method: post
+    content_type: "application/json"
+    payload: '{"text": "{{ text }}"}'
+
+  nexus_daily_brief:
+    url: "http://100.68.201.55:5678/webhook/daily-brief"
+    method: get
+    content_type: "application/json"
+
+  # Health Check
+  nexus_health_check:
+    url: "http://100.68.201.55:8080/health"
+    method: get
+    content_type: "application/json"

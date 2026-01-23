@@ -31,7 +31,7 @@ async def analyze_performance(
     days_back: int = 7,
     metric_types: Optional[List[str]] = None,
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Trigger performance analysis for the system.
 
@@ -52,8 +52,8 @@ async def analyze_performance(
             for mt in metric_types:
                 try:
                     metric_type_enums.append(MetricType(mt))
-                except ValueError:
-                    pass
+                except ValueError as e:
+                    logger.debug(f"Ignoring invalid metric type '{mt}': {e}")
             if not metric_type_enums:
                 metric_type_enums = None
 
@@ -82,7 +82,7 @@ async def analyze_performance(
 async def get_recent_analysis(
     limit: int = 10,
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Get recent performance analysis results from evolution_analysis table.
     """
@@ -92,11 +92,7 @@ async def get_recent_analysis(
             ORDER BY created_at DESC
             LIMIT $1
         """
-        rows = await db.fetch(query, limit)
-
-        analyses = []
-        for row in rows:
-            analyses.append(dict(row))
+        analyses = await db.fetch_all(query, limit)
 
         return {
             "success": True,
@@ -120,7 +116,7 @@ async def generate_hypotheses(
     analysis_period_days: int = 7,
     max_hypotheses: int = 5,
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Generate improvement hypotheses based on recent performance analysis.
     """
@@ -150,7 +146,7 @@ async def get_hypotheses(
     hypothesis_type: Optional[str] = None,
     limit: int = 20,
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Get existing hypotheses with optional filtering.
     """
@@ -163,16 +159,16 @@ async def get_hypotheses(
         if status:
             try:
                 status_enum = HypothesisStatus(status)
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.debug(f"Ignoring invalid hypothesis status '{status}': {e}")
 
         # Convert string type to enum if provided
         type_enum = None
         if hypothesis_type:
             try:
                 type_enum = HypothesisType(hypothesis_type)
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.debug(f"Ignoring invalid hypothesis type '{hypothesis_type}': {e}")
 
         hypotheses = await hypothesis_generator.get_hypotheses(
             status=status_enum,
@@ -206,7 +202,7 @@ async def create_experiment(
     success_criteria: Optional[Dict[str, Any]] = None,
     rollout_strategy: str = "linear",
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Create a new A/B experiment to test a hypothesis.
     """
@@ -256,38 +252,42 @@ async def create_experiment(
         raise HTTPException(status_code=500, detail=f"Experiment creation failed: {str(e)}")
 
 
-@router.get("/evolution/experiments")
-async def get_experiments(
-    status: Optional[str] = None,
-    limit: int = 20,
-    db: Database = Depends(get_db)
-):
-    """
-    Get experiments with optional filtering.
-    """
-    try:
-        # For now, query the existing agent_experiments table
-        base_query = "SELECT * FROM agent_experiments WHERE 1=1"
-        params = []
-
-        if status:
-            base_query += " AND status = $1"
-            params.append(status)
-
-        base_query += " ORDER BY created_at DESC LIMIT $2"
-        params.append(limit)
-
-        rows = await db.fetch(base_query, *params)
-        experiments = [dict(row) for row in rows]
-
-        return {
-            "success": True,
-            "experiments": experiments,
-            "count": len(experiments)
-        }
-    except Exception as e:
-        logger.error(f"Failed to fetch experiments: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to fetch experiments: {str(e)}")
+# @router.get("/evolution/experiments")
+# async def get_experiments(
+#     status: Optional[str] = None,
+#     limit: int = 20,
+#     db: Database = Depends(get_db)
+# ) -> Dict[str, Any]:
+#     """
+#     Get experiments with optional filtering.
+#     """
+#     try:
+#         # Validate limit
+#         if limit <= 0 or limit > 100:
+#             limit = 20
+#
+#         # Build query with proper parameter numbering
+#         base_query = "SELECT * FROM agent_experiments"
+#         params = []
+#
+#         if status:
+#             base_query += " WHERE status = $1"
+#             params.append(status)
+#             base_query += f" ORDER BY created_at DESC LIMIT {limit}"
+#         else:
+#             base_query += f" ORDER BY created_at DESC LIMIT {limit}"
+#
+#         logger.info(f"Query: {base_query}, params: {params}")
+#         experiments = await db.fetch_all(base_query, *params)
+#
+#         return {
+#             "success": True,
+#             "experiments": experiments,
+#             "count": len(experiments)
+#         }
+#     except Exception as e:
+#         logger.error(f"Failed to fetch experiments: {e}", exc_info=True)
+#         raise HTTPException(status_code=500, detail=f"Failed to fetch experiments: {str(e)}")
 
 
 @router.post("/evolution/experiments/{experiment_id}/rollback")
@@ -295,7 +295,7 @@ async def rollback_experiment(
     experiment_id: str,
     reason: str = "manual_rollback",
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Manually rollback an experiment.
     """
@@ -323,7 +323,7 @@ async def refactor_code(
     hypothesis_id: str,
     dry_run: bool = True,
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Apply code refactoring based on a hypothesis.
     """
@@ -376,7 +376,7 @@ async def refactor_code(
 async def get_refactor_history(
     limit: int = 20,
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Get history of code refactoring operations.
     """
@@ -388,8 +388,7 @@ async def get_refactor_history(
             LIMIT $1
         """
 
-        rows = await db.fetch(query, limit)
-        history = [dict(row) for row in rows]
+        history = await db.fetch_all(query, limit)
 
         return {
             "success": True,
@@ -411,7 +410,7 @@ async def get_refactor_history(
 @router.get("/evolution/status")
 async def get_evolution_status(
     db: Database = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """
     Get overall status of the self-evolution system.
     """
@@ -420,28 +419,28 @@ async def get_evolution_status(
         hypotheses_count = 0
         try:
             hypotheses_query = "SELECT COUNT(*) FROM evolution_hypotheses"
-            hypotheses_result = await db.fetchrow(hypotheses_query)
+            hypotheses_result = await db.fetch_one(hypotheses_query)
             hypotheses_count = hypotheses_result["count"] if hypotheses_result else 0
-        except Exception:
-            pass  # Table may not exist yet
+        except Exception as e:
+            logger.debug(f"Evolution hypotheses table may not exist yet: {e}")  # Table may not exist yet
 
         # Count experiments
         experiments_count = 0
         try:
             experiments_query = "SELECT COUNT(*) FROM agent_experiments"
-            experiments_result = await db.fetchrow(experiments_query)
+            experiments_result = await db.fetch_one(experiments_query)
             experiments_count = experiments_result["count"] if experiments_result else 0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Agent experiments table may not exist yet: {e}")
 
         # Count refactoring proposals
         refactorings_count = 0
         try:
             refactorings_query = "SELECT COUNT(*) FROM refactoring_proposals"
-            refactorings_result = await db.fetchrow(refactorings_query)
+            refactorings_result = await db.fetch_one(refactorings_query)
             refactorings_count = refactorings_result["count"] if refactorings_result else 0
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Refactoring proposals table may not exist yet: {e}")
 
         # Get recent bottlenecks
         recent_bottlenecks = []
@@ -452,10 +451,9 @@ async def get_evolution_status(
                 ORDER BY last_detected DESC
                 LIMIT 5
             """
-            bottlenecks_rows = await db.fetch(bottlenecks_query)
-            recent_bottlenecks = [dict(row) for row in bottlenecks_rows]
-        except Exception:
-            pass
+            recent_bottlenecks = await db.fetch_all(bottlenecks_query)
+        except Exception as e:
+            logger.debug(f"Bottleneck patterns table may not exist yet: {e}")
 
         return {
             "success": True,

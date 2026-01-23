@@ -119,3 +119,183 @@ class APIUsageLog(BaseModel):
     success: bool = True
     error_message: Optional[str] = None
     query_hash: Optional[str] = None
+
+
+# ============ Swarm Models ============
+
+class SwarmCreate(BaseModel):
+    """Create a new swarm."""
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    purpose: str = Field(..., min_length=1)
+    swarm_type: str = Field(default="collaborative")
+    max_members: int = Field(default=10, gt=0)
+    auto_scaling: bool = Field(default=True)
+    health_check_interval_seconds: int = Field(default=60, gt=0)
+    metadata: Optional[dict] = None
+
+
+class SwarmUpdate(BaseModel):
+    """Update swarm configuration."""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    purpose: Optional[str] = Field(None, min_length=1)
+    swarm_type: Optional[str] = None
+    max_members: Optional[int] = Field(None, gt=0)
+    auto_scaling: Optional[bool] = None
+    health_check_interval_seconds: Optional[int] = Field(None, gt=0)
+    is_active: Optional[bool] = None
+    metadata: Optional[dict] = None
+
+
+class SwarmResponse(BaseModel):
+    """Swarm response."""
+    id: UUID
+    name: str
+    description: Optional[str]
+    purpose: str
+    swarm_type: str
+    max_members: int
+    auto_scaling: bool
+    health_check_interval_seconds: int
+    is_active: bool
+    metadata: dict
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        extra = "ignore"
+
+
+class SwarmMembershipCreate(BaseModel):
+    """Add agent to swarm."""
+    agent_id: UUID
+    role: str = Field(default="member")
+    metadata: Optional[dict] = None
+    vote_weight: Optional[float] = None
+
+
+class SwarmMembershipResponse(BaseModel):
+    """Swarm membership response."""
+    id: UUID
+    swarm_id: UUID
+    agent_id: UUID
+    agent_name: Optional[str] = None
+    agent_type: Optional[str] = None
+    role: str
+    status: str
+    last_seen_at: Optional[datetime]
+    metadata: dict
+    joined_at: datetime
+    contribution_score: float = Field(default=0.0)
+    vote_weight: float = Field(default=0.0)
+
+
+class ConsensusGroupCreate(BaseModel):
+    """Create consensus group."""
+    group_name: str = Field(..., min_length=1)
+    current_term: Optional[int] = Field(default=0, ge=0)
+    voted_for: Optional[UUID] = None
+    commit_index: Optional[int] = Field(default=0, ge=0)
+    last_applied_index: Optional[int] = Field(default=0, ge=0)
+    leader_id: Optional[UUID] = None
+    state: Optional[str] = Field(default="follower")
+
+
+class ConsensusGroupResponse(BaseModel):
+    """Consensus group response."""
+    id: UUID
+    swarm_id: UUID
+    group_name: str
+    current_term: int
+    voted_for: Optional[UUID]
+    commit_index: int
+    last_applied_index: int
+    leader_id: Optional[UUID]
+    state: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class VoteCreate(BaseModel):
+    """Create a vote."""
+    vote_type: str = Field(..., min_length=1)
+    subject: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    options: List[str] = Field(..., min_items=2)
+    voting_strategy: str = Field(default="simple_majority")
+    required_quorum: float = Field(default=0.5, ge=0.0, le=1.0)
+    created_by_agent_id: UUID
+    expires_at: Optional[datetime] = None
+    metadata: Optional[dict] = None
+
+
+class VoteResponse(BaseModel):
+    """Vote response."""
+    id: UUID
+    swarm_id: UUID
+    vote_type: str
+    subject: str
+    description: str
+    options: List[str]
+    voting_strategy: str
+    required_quorum: float
+    status: str
+    created_by_agent_id: UUID
+    expires_at: Optional[datetime]
+    metadata: dict
+    created_at: datetime
+    updated_at: datetime
+
+
+class VoteCast(BaseModel):
+    """Cast a vote."""
+    agent_id: UUID
+    option: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    rationale: Optional[str] = None
+    metadata: Optional[dict] = None
+
+
+class SwarmMessageSend(BaseModel):
+    """Send swarm message."""
+    sender_agent_id: UUID
+    recipient_agent_id: Optional[UUID] = None
+    channel: str = Field(default="general")
+    message_type: str = Field(default="text")
+    content: str = Field(..., min_length=1)
+    priority: int = Field(default=1, ge=1, le=5)
+    ttl_seconds: Optional[int] = Field(default=3600, gt=0)
+
+
+class SwarmMessageResponse(BaseModel):
+    """Swarm message response."""
+    id: UUID
+    swarm_id: UUID
+    sender_agent_id: UUID
+    recipient_agent_id: Optional[UUID]
+    channel: str
+    message_type: str
+    content: str
+    priority: int
+    ttl_seconds: Optional[int]
+    delivered: bool
+    created_at: datetime
+
+
+class SwarmEventQuery(BaseModel):
+    """Query swarm events."""
+    event_type: Optional[str] = None
+    since: Optional[datetime] = None
+
+
+class SwarmEventResponse(BaseModel):
+    """Swarm event response."""
+    id: UUID
+    swarm_id: UUID
+    event_type: str
+    event_data: dict
+    source_agent_id: UUID
+    is_global: bool
+    occurred_at: datetime
+    created_at: datetime

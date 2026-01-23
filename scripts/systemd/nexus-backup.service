@@ -1,0 +1,18 @@
+[Unit]
+Description=NEXUS Backup Service
+After=network.target docker.service nexus-api.service
+Requires=docker.service
+Wants=nexus-api.service
+
+[Service]
+Type=oneshot
+User=philip
+Group=philip
+WorkingDirectory=/home/philip/nexus
+Environment="PATH=/home/philip/nexus/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/philip/nexus/scripts/backup_nexus.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

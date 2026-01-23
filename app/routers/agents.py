@@ -7,6 +7,7 @@ Agent management, task execution, session management, and performance monitoring
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from typing import List, Optional, Dict, Any
 from uuid import UUID
+from decimal import Decimal
 import logging
 import asyncio
 
@@ -28,7 +29,8 @@ from ..models.agent_schemas import (
 from ..agents.base import AgentStatus
 from ..agents.registry import AgentRegistry
 from ..agents.tools import ToolSystem
-from ..agents.sessions import SessionManager
+from ..agents.email_intelligence import register_email_agent
+from ..agents.sessions import SessionManager, SessionConfig
 from ..agents.orchestrator import OrchestratorEngine
 from ..agents.memory import MemorySystem
 from ..agents.monitoring import PerformanceMonitor
@@ -69,6 +71,13 @@ async def initialize_agent_framework() -> None:
 
         # Initialize other components as needed
         # (SessionManager, OrchestratorEngine, MemorySystem may not need explicit initialization)
+
+        # Register email agent
+        try:
+            await register_email_agent()
+            logger.info("Email agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register email agent: {e}. System will continue without email agent.")
 
         _components_initialized = True
         logger.info("Agent framework components initialized successfully")
@@ -112,35 +121,58 @@ async def get_performance_monitor() -> PerformanceMonitor:
 
 async def _agent_to_response(agent: "BaseAgent") -> AgentResponse:
     """Convert BaseAgent instance to AgentResponse."""
-    # Fetch agent details from database (only columns that exist)
     from ..agents.base import BaseAgent, AgentType, AgentStatus
-    agent_data = await db.fetch_one(
-        """
-        SELECT id, name, agent_type, description, system_prompt, capabilities,
-               domain, supervisor_id, created_at, updated_at
-        FROM agents WHERE id = $1
-        """,
-        UUID(agent.agent_id)
-    )
-    if not agent_data:
-        raise HTTPException(status_code=404, detail="Agent not found in database")
+    import json
 
-    # Use agent's runtime config and status (not stored in database)
-    return AgentResponse(
-        id=agent_data["id"],
-        name=agent_data["name"],
-        agent_type=AgentType(agent_data["agent_type"]),
-        description=agent_data["description"] or "",
-        system_prompt=agent_data["system_prompt"] or "",
-        capabilities=agent_data["capabilities"] or [],
-        domain=agent_data["domain"],
-        supervisor_id=agent_data["supervisor_id"],
-        config=agent.config or {},
-        status=agent.status,
-        metrics=agent.metrics,
-        created_at=agent_data["created_at"],
-        updated_at=agent_data["updated_at"]
-    )
+    # Try to fetch from database first
+    agent_data = None
+    try:
+        agent_data = await db.fetch_one(
+            """
+            SELECT id, name, agent_type, description, system_prompt, capabilities,
+                   domain, supervisor_id, config, created_at, updated_at
+            FROM agents WHERE id = $1
+            """,
+            UUID(agent.agent_id)
+        )
+    except Exception as e:
+        logger.debug(f"Failed to fetch agent {agent.agent_id} from database: {e}")
+
+    if agent_data:
+        # Use database data
+        return AgentResponse(
+            id=agent_data["id"],
+            name=agent_data["name"],
+            agent_type=AgentType(agent_data["agent_type"]),
+            description=agent_data["description"] or "",
+            system_prompt=agent_data["system_prompt"] or "",
+            capabilities=agent_data["capabilities"] or [],
+            domain=agent_data["domain"],
+            supervisor_id=agent_data["supervisor_id"],
+            config=json.loads(agent_data["config"]) if isinstance(agent_data.get("config"), str) else (agent_data.get("config") or {}),
+            status=agent.status,
+            metrics=agent.metrics,
+            created_at=agent_data["created_at"],
+            updated_at=agent_data["updated_at"]
+        )
+    else:
+        # Fall back to agent instance attributes
+        from datetime import datetime
+        return AgentResponse(
+            id=UUID(agent.agent_id),
+            name=agent.name,
+            agent_type=getattr(agent, 'agent_type', AgentType.DOMAIN),
+            description=getattr(agent, 'description', ''),
+            system_prompt=getattr(agent, 'system_prompt', ''),
+            capabilities=getattr(agent, 'capabilities', []),
+            domain=getattr(agent, 'domain', None),
+            supervisor_id=getattr(agent, 'supervisor_id', None),
+            config=agent.config or {},
+            status=agent.status,
+            metrics=agent.metrics,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
 
 
 # ============ Agent Management Endpoints ============
@@ -255,7 +287,7 @@ async def get_agent(
     agent = await registry.get_agent(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
+    return await _agent_to_response(agent)
 
 
 @router.put("/agents/{agent_id}", response_model=AgentResponse)
@@ -272,7 +304,7 @@ async def update_agent(
         )
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
-        return agent
+        return await _agent_to_response(agent)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -298,10 +330,11 @@ async def start_agent(
 ):
     """Start an agent (activate it for task processing)."""
     try:
-        agent = await registry.start_agent(agent_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        return agent
+        success = await registry.start_agent(agent_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Agent not found or already started")
+        agent = await registry.get_agent(agent_id)
+        return await _agent_to_response(agent)
     except Exception as e:
         logger.error(f"Failed to start agent: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start agent: {e}")
@@ -314,10 +347,11 @@ async def stop_agent(
 ):
     """Stop an agent (deactivate it)."""
     try:
-        agent = await registry.stop_agent(agent_id)
-        if not agent:
-            raise HTTPException(status_code=404, detail="Agent not found")
-        return agent
+        success = await registry.stop_agent(agent_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Agent not found or already stopped")
+        agent = await registry.get_agent(agent_id)
+        return await _agent_to_response(agent)
     except Exception as e:
         logger.error(f"Failed to stop agent: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to stop agent: {e}")
@@ -427,13 +461,42 @@ async def create_session(
 ):
     """Create a new agent session."""
     try:
-        session = await session_mgr.create_session(
+        # Create session configuration
+        config = SessionConfig()
+        config.metadata = session_data.metadata
+        # session_type is handled by session_mgr.create_session via session_type parameter
+
+        # Convert UUID to string for session manager
+        primary_agent_id_str = str(session_data.primary_agent_id) if session_data.primary_agent_id else None
+
+        session_id = await session_mgr.create_session(
             title=session_data.title,
             session_type=session_data.session_type,
-            primary_agent_id=session_data.primary_agent_id,
-            metadata=session_data.metadata
+            primary_agent_id=primary_agent_id_str,
+            config=config
         )
-        return session
+        # Get created session
+        session_dict = await session_mgr.get_session(session_id)
+        if not session_dict:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created session")
+
+        # Convert to SessionResponse
+        return SessionResponse(
+            id=UUID(session_dict["id"]),
+            title=session_dict["title"],
+            session_type=session_dict["type"],
+            summary=session_dict.get("summary", ""),
+            primary_agent_id=UUID(session_dict["primary_agent_id"]) if session_dict["primary_agent_id"] else None,
+            agents_involved=[UUID(agent_id) for agent_id in session_dict["agents_involved"]],
+            total_messages=session_dict.get("message_count", 0),
+            total_tokens=session_dict.get("total_tokens", 0),
+            total_cost_usd=Decimal(str(session_dict.get("total_cost_usd", 0.0))),
+            status=session_dict["status"],
+            started_at=session_dict["created_at"],
+            last_message_at=session_dict.get("last_message_at", session_dict["created_at"]),
+            ended_at=None,
+            metadata=session_dict.get("metadata", {})
+        )
     except Exception as e:
         logger.error(f"Failed to create session: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -698,7 +761,7 @@ async def get_agent_memory(
 ):
     """Get memories for a specific agent."""
     try:
-        memories = await memory_system.get_memories(
+        memories = await memory_sys.get_memories(
             agent_id=agent_id,
             memory_type=memory_type,
             limit=limit
@@ -721,7 +784,7 @@ async def query_memory(
         limit = query.get("limit", 10)
         threshold = query.get("threshold", 0.7)
 
-        results = await memory_system.query_memory(
+        results = await memory_sys.query_memory(
             agent_id=agent_id,
             query_text=text,
             limit=limit,
@@ -742,10 +805,17 @@ async def store_memory(
     """Store a new memory for an agent."""
     try:
         content = memory_data.get("content", "")
-        memory_type = memory_data.get("type", "observation")
+        memory_type_str = memory_data.get("type", "observation")
         metadata = memory_data.get("metadata", {})
+        # Convert string to MemoryType enum
+        try:
+            from ..agents.memory import MemoryType
+            memory_type = MemoryType(memory_type_str)
+        except ValueError:
+            # Default to SEMANTIC if invalid
+            memory_type = MemoryType.SEMANTIC
 
-        memory_id = await memory_system.store_memory(
+        memory_id = await memory_sys.store_memory(
             agent_id=agent_id,
             content=content,
             memory_type=memory_type,

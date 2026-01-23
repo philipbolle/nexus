@@ -29,7 +29,20 @@
 4. ✅ Implement Self-Evolution System (COMPLETED)
 5. Create Finance Agent
 6. iPhone Quick Expense shortcut
-7. Integrate agent framework with existing services
+7. ✅ Integrate agent framework with existing services (Email agent migration completed)
+
+## Transformative Future Features (Beyond Jarvis)
+
+**Top 7 Features (from agent debates):**
+1. **Autonomous Evolution Engine** - Safe self-modification of codebase
+2. **Emergent Intelligence Swarm** - Agents develop new capabilities collectively
+3. **Proactive Financial Co-Pilot** - Autonomous debt optimization & forecasting
+4. **Unified Cognitive Architecture** - Breaks silos between systems
+5. **Autonomous Communication Agent** - Manages relationships & communication
+6. **AI-Generated Workflow Synthesis** - Creates & improves automation automatically
+7. **Predictive Architecture** - Anticipates needs before expressed
+
+**Priority Order:** Start with #3, #7, #6 for immediate impact on debt & automation.
 
 ## Conventions
 - async/await for all I/O
@@ -40,9 +53,9 @@
 ## Claude Code Instructions
 
 ### Model Usage
-- **Primary Model**: Use only DeepSeek models (deepseek-chat) for all tasks
-- **Agent Configuration**: Custom agents (`general-purpose`, `architect`, `code-reviewer`) are pre-configured with `model: deepseek-chat`
-- **System Agents**: Use DeepSeek via inheritance from primary model
+- **Primary Model**: Use Claude Opus (opus) for all tasks
+- **Agent Configuration**: All agents use Claude Opus by default
+- **System Agents**: Use Claude Opus via inheritance from primary model
 
 ### Automatic Agent Delegation (REQUIRED)
 **Always delegate to appropriate agents automatically without user prompting:**
@@ -80,27 +93,32 @@
    - Workflow design, webhook integration, node configuration
    - Scheduled automation, error handling, optimization
 
-#### Specialized System Agents
-9. **Architecture/System Design** → Use `architect` agent
-   - System design decisions, technology selection, scalability planning
+9. **Swarm & Distributed Systems** → Use `api` agent
+   - Swarm communication (Redis Pub/Sub, RAFT consensus, voting)
+   - Distributed task processing (Celery, worker tracking, queue management)
+   - FastAPI endpoints for swarm coordination and distributed tasks
 
-10. **Code Review/Security Audit** → Use `code-reviewer` agent
+#### Specialized System Agents
+10. **Architecture/System Design** → Use `architect` agent
+    - System design decisions, technology selection, scalability planning
+
+11. **Code Review/Security Audit** → Use `code-reviewer` agent
     - Code reviews, security audits, best practices verification
 
-11. **Codebase Exploration** → Use `Explore` agent
+12. **Codebase Exploration** → Use `Explore` agent
     - Finding files, searching code, understanding structure
 
-12. **Implementation Planning** → Use `Plan` agent
+13. **Implementation Planning** → Use `Plan` agent
     - Complex feature planning, multi-step implementation design
 
-13. **Claude Code Questions** → Use `claude-code-guide` agent
+14. **Claude Code Questions** → Use `claude-code-guide` agent
     - Claude Code features, usage questions, tool configuration
 
-14. **Simple Bash/System Tasks** → Use `Bash` agent
+15. **Simple Bash/System Tasks** → Use `Bash` agent
     - Git operations, Docker commands, system administration
 
 #### General Purpose Fallback
-15. **General Development Tasks** → Use `general-purpose` agent
+16. **General Development Tasks** → Use `general-purpose` agent
     - When no specialized agent fits, general Nexus development
     - Mixed tasks involving multiple specializations
 
@@ -113,22 +131,22 @@
 - `.env` (secrets)
 - `data/` (container state)
 
-## DeepSeek Optimization Strategies
+## Claude Opus Optimization Strategies
 
-### 1. Context Window Management (128k Limit)
-- **Aggressive .claudignore**: Heavy files excluded (data/, logs/, *.json, *.csv, media)
-- **Manual Truncation**: Use `/compact` when conversation grows too long
-- **Chunked Operations**: Break large tasks into smaller, focused agent calls
+### 1. Context Window Management
+- **Large Context**: Claude Opus has 200k context window, suitable for large codebases
+- **Efficient Analysis**: Use Plan Mode for complex implementations to reduce iteration
+- **Chunked Operations**: Break large tasks into focused agent calls for better results
 
-### 2. Plan Mode for Cost Efficiency
+### 2. Plan Mode for Implementation Quality
 **Before complex implementations:**
 1. **Always start with**: "Read CLAUDE.md and enter Plan Mode"
-2. **Review**: DeepSeek outlines changes in single completion
+2. **Review**: Claude Opus designs comprehensive implementation plan
 3. **Approve**: Say "Execute" to implement after review
-4. **Prevents looping**: Reduces API costs from trial-and-error
+4. **Quality Assurance**: Ensures well-architected solutions before coding
 
-### 3. MCP (Model Context Protocol) Power-Ups
-**Essential for DeepSeek's world knowledge gap - ✅ AUTOMATICALLY INSTALLED & CONFIGURED:**
+### 3. MCP (Model Context Protocol) Integration
+**Enhances Claude Opus capabilities - ✅ AUTOMATICALLY INSTALLED & CONFIGURED:**
 - **Sequential Thinking MCP**: Forces private reasoning before code ✅ Installed & configured
 - **Filesystem MCP**: Direct file access without guessing ✅ Installed & configured
 - **Fetch MCP**: HTTP request testing ✅ Installed & configured (Python virtual environment)
@@ -141,12 +159,33 @@
 
 ### 5. Automatic Agent Delegation Rules
 **Already configured in agents/ directory:**
-- 11 specialized agents pre-configured with DeepSeek
+- 11 specialized agents now using Claude Opus
 - Automatic delegation based on task type
-- Each agent optimized for specific domain
+- Each agent optimized for specific domain with Opus quality
 
 ## Philip's Context
 - Night shift janitor, 6PM-12AM
 - ~$1,800/month, $300-400 to debt
 - $9,700 owed to mom
 - Learning Linux/Python
+- **Nexus is Philip's AI assistant** - his "second brain" and trusted companion that orchestrates all personal automation
+
+## MCP Integration Examples
+
+### PostgreSQL MCP Tools
+- "List all database tables"
+- "Describe the api_usage table schema"
+- "Show me the first 5 rows from fin_expenses"
+- "Get statistics for the agents table"
+- "Search for tables containing 'email'"
+
+### Agent Framework MCP Tools
+- "List all agents in the framework"
+- "Get status of agent with ID [agent_id]"
+- "Submit a task to an agent"
+- "Query agent memory for [topic]"
+
+### Other MCP Tools
+- "Check Redis cache keys"
+- "List ChromaDB collections"
+- "Trigger n8n workflow [workflow_name]"

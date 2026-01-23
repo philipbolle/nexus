@@ -6,7 +6,7 @@ Expense tracking, budget status, debt progress.
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Dict, Any
 from uuid import uuid4
 import logging
 
@@ -43,7 +43,7 @@ async def get_or_create_category(db: Database, category_name: str) -> str:
 
 
 @router.post("/expense", response_model=ExpenseResponse)
-async def log_expense(expense: ExpenseCreate, database: Database = Depends(get_db)):
+async def log_expense(expense: ExpenseCreate, database: Database = Depends(get_db)) -> ExpenseResponse:
     """
     Log an expense transaction.
 
@@ -112,7 +112,7 @@ async def log_expense(expense: ExpenseCreate, database: Database = Depends(get_d
 
 
 @router.get("/budget-status", response_model=BudgetStatus)
-async def get_budget_status(database: Database = Depends(get_db)):
+async def get_budget_status(database: Database = Depends(get_db)) -> BudgetStatus:
     """
     Get current month's budget status by category.
     """
@@ -167,7 +167,7 @@ async def get_budget_status(database: Database = Depends(get_db)):
 
 
 @router.get("/debt/progress", response_model=DebtSummary)
-async def get_debt_progress(database: Database = Depends(get_db)):
+async def get_debt_progress(database: Database = Depends(get_db)) -> DebtSummary:
     """
     Get debt payoff progress.
     """

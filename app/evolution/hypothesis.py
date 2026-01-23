@@ -377,11 +377,7 @@ class HypothesisGenerator:
             base_query += f" ORDER BY created_at DESC LIMIT ${param_count + 1}"
             params.append(limit)
 
-            rows = await self.db.fetch(base_query, *params)
-
-            hypotheses = []
-            for row in rows:
-                hypotheses.append(dict(row))
+            hypotheses = await self.db.fetch_all(base_query, *params)
 
             return hypotheses
         except Exception as e:

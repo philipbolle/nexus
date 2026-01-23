@@ -23,6 +23,20 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
     redis_password: str = Field(alias="REDIS_PASSWORD")
 
+    # Celery
+    celery_broker_pool_limit: int = Field(default=10, alias="CELERY_BROKER_POOL_LIMIT")
+    celery_result_backend: str = Field(default="redis", alias="CELERY_RESULT_BACKEND")
+    celery_task_serializer: str = Field(default="json", alias="CELERY_TASK_SERIALIZER")
+    celery_result_serializer: str = Field(default="json", alias="CELERY_RESULT_SERIALIZER")
+    celery_accept_content: list = Field(default=["json"], alias="CELERY_ACCEPT_CONTENT")
+    celery_timezone: str = Field(default="UTC", alias="CELERY_TIMEZONE")
+    celery_enable_utc: bool = Field(default=True, alias="CELERY_ENABLE_UTC")
+
+    # ChromaDB
+    chromadb_host: str = Field(default="localhost:8000", alias="CHROMADB_HOST")
+    chromadb_token: str = Field(default="", alias="CHROMA_TOKEN")
+    chromadb_collection_prefix: str = Field(default="nexus_", alias="CHROMADB_COLLECTION_PREFIX")
+
     # AI Providers
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY")
@@ -59,6 +73,25 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         """Redis connection string."""
         return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/0"
+
+    @property
+    def celery_broker_url(self) -> str:
+        """Celery broker URL using Redis."""
+        return self.redis_url
+
+    @property
+    def celery_result_backend_url(self) -> str:
+        """Celery result backend URL."""
+        return self.redis_url.replace('/0', '/1')  # Use different Redis database for results
+
+    @property
+    def chromadb_settings(self) -> dict:
+        """ChromaDB connection settings."""
+        return {
+            "host": self.chromadb_host,
+            "auth_token": self.chromadb_token if self.chromadb_token else None,
+            "collection_prefix": self.chromadb_collection_prefix
+        }
 
     class Config:
         env_file = ".env"

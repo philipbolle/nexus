@@ -9,3 +9,13 @@ frontend:
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
+```yaml
+sensor: !include sensors.yaml
+```
+```yaml
+script: !include scripts.yaml
+```
+```yaml
+automation: !include automations.yaml
+```
+

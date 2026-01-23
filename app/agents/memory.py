@@ -96,6 +96,152 @@ class MemorySystem:
         self.agent_memory_blocks: Dict[str, Dict[str, MemoryBlock]] = {}  # agent_id -> {block_label: block}
         self.memory_cache: Dict[str, MemoryResult] = {}
         self._initialized = False
+        self.chroma_client: Optional[chromadb.ClientAPI] = None
+        self.chroma_collections: Dict[str, chromadb.Collection] = {}
+        self.use_chromadb: bool = True  # Flag to enable/disable ChromaDB
+
+    async def _init_chromadb_client(self) -> None:
+        """Initialize ChromaDB client and create collections."""
+        try:
+            chroma_settings = settings.chromadb_settings
+            host = chroma_settings["host"]
+            auth_token = chroma_settings["auth_token"]
+            collection_prefix = chroma_settings["collection_prefix"]
+
+            # Configure ChromaDB client
+            chroma_config = Settings(
+                chroma_server_host=host,
+                chroma_server_http_port=8000,
+                chroma_server_ssl_enabled=False,
+                chroma_server_auth_token=auth_token if auth_token else None,
+            )
+
+            self.chroma_client = chromadb.Client(chroma_config)
+
+            # Create collections for each memory type
+            for memory_type in MemoryType:
+                collection_name = f"{collection_prefix}{memory_type.value}"
+                # Get or create collection
+                collection = self.chroma_client.get_or_create_collection(
+                    name=collection_name,
+                    metadata={"memory_type": memory_type.value}
+                )
+                self.chroma_collections[memory_type.value] = collection
+
+            logger.info(f"Initialized ChromaDB client with {len(self.chroma_collections)} collections")
+
+        except Exception as e:
+            logger.warning(f"Failed to initialize ChromaDB client: {e}. Falling back to PostgreSQL-only mode.")
+            self.use_chromadb = False
+            self.chroma_client = None
+
+    async def _store_memory_in_chromadb(
+        self,
+        memory_id: str,
+        agent_id: str,
+        content: str,
+        memory_type: MemoryType,
+        embedding: List[float],
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """Store memory vector in ChromaDB."""
+        if not self.use_chromadb or not self.chroma_client:
+            return False
+
+        try:
+            collection = self.chroma_collections.get(memory_type.value)
+            if not collection:
+                logger.warning(f"No ChromaDB collection for memory type {memory_type.value}")
+                return False
+
+            # Prepare metadata for ChromaDB
+            chroma_metadata = {
+                "memory_id": memory_id,
+                "agent_id": agent_id,
+                "memory_type": memory_type.value,
+                "timestamp": datetime.now().isoformat()
+            }
+            if metadata:
+                # Filter metadata to avoid complex types
+                for key, value in metadata.items():
+                    if isinstance(value, (str, int, float, bool)):
+                        chroma_metadata[key] = str(value)
+                    elif isinstance(value, list) and all(isinstance(item, (str, int, float, bool)) for item in value):
+                        chroma_metadata[key] = json.dumps(value)
+
+            # Add to ChromaDB collection
+            collection.add(
+                ids=[memory_id],
+                embeddings=[embedding],
+                metadatas=[chroma_metadata],
+                documents=[content[:1000]]  # Store truncated content
+            )
+
+            logger.debug(f"Stored memory {memory_id} in ChromaDB collection {memory_type.value}")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Failed to store memory {memory_id} in ChromaDB: {e}")
+            return False
+
+    async def _search_memories_in_chromadb(
+        self,
+        query_embedding: List[float],
+        memory_types: Optional[List[MemoryType]] = None,
+        agent_id: Optional[str] = None,
+        limit: int = 10,
+        min_similarity: float = 0.7
+    ) -> List[Tuple[str, float]]:
+        """Search memories in ChromaDB using vector similarity."""
+        if not self.use_chromadb or not self.chroma_client:
+            return []
+
+        results = []
+        try:
+            # Determine which collections to search
+            collections_to_search = []
+            if memory_types:
+                for mt in memory_types:
+                    collection = self.chroma_collections.get(mt.value)
+                    if collection:
+                        collections_to_search.append(collection)
+            else:
+                # Search all collections
+                collections_to_search = list(self.chroma_collections.values())
+
+            for collection in collections_to_search:
+                # Build ChromaDB query filters
+                where = {}
+                if agent_id:
+                    where["agent_id"] = agent_id
+
+                # Query collection
+                query_results = collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=limit,
+                    where=where if where else None,
+                    include=["metadatas", "distances", "documents"]
+                )
+
+                # Process results
+                if query_results and query_results.get("ids"):
+                    for i, memory_id in enumerate(query_results["ids"][0]):
+                        distance = query_results["distances"][0][i]
+                        similarity = 1.0 - distance  # Convert distance to similarity
+
+                        if similarity >= min_similarity:
+                            results.append((memory_id, similarity))
+
+            # Sort by similarity and limit
+            results.sort(key=lambda x: x[1], reverse=True)
+            results = results[:limit]
+
+            logger.debug(f"ChromaDB search found {len(results)} results")
+            return results
+
+        except Exception as e:
+            logger.warning(f"ChromaDB search failed: {e}")
+            return []
 
     async def initialize(self) -> None:
         """
@@ -111,6 +257,9 @@ class MemorySystem:
         try:
             # Load memory blocks for active agents
             await self._load_memory_blocks()
+
+            # Initialize ChromaDB client
+            await self._init_chromadb_client()
 
             # Start background consolidation job
             asyncio.create_task(self._run_consolidation_jobs())
@@ -160,6 +309,21 @@ class MemorySystem:
         logger.debug(f"Storing {memory_type.value} memory for agent {agent_id}: {content[:100]}...")
 
         try:
+            # Store in ChromaDB (if enabled)
+            if self.use_chromadb:
+                try:
+                    await self._store_memory_in_chromadb(
+                        memory_id=memory_id,
+                        agent_id=agent_id,
+                        content=content,
+                        memory_type=memory_type,
+                        embedding=embedding_list,
+                        metadata=metadata
+                    )
+                except Exception as e:
+                    logger.warning(f"ChromaDB storage failed for memory {memory_id}: {e}")
+                    # Continue with PostgreSQL storage
+
             # Store in PostgreSQL with pgvector
             await db.execute(
                 """
@@ -212,6 +376,50 @@ class MemorySystem:
             logger.error(f"Failed to store memory for agent {agent_id}: {e}")
             raise
 
+    async def get_memories(self, agent_id: str, memory_type: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Get memories for a specific agent.
+        """
+        try:
+            # TODO: Implement proper memory retrieval
+            logger.warning(f"get_memories called but not fully implemented for agent {agent_id}")
+            return []
+        except Exception as e:
+            logger.error(f"Failed to get memories for agent {agent_id}: {e}")
+            return []
+
+    async def query_memory(self, agent_id: str, query_text: str, limit: int = 10, similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
+        """
+        Query agent memory with semantic search.
+        """
+        try:
+            query = MemoryQuery(
+                query_text=query_text,
+                agent_id=agent_id,
+                limit=limit,
+                min_similarity=similarity_threshold
+            )
+            results = await self.search_memories(query)
+            # Convert MemoryResult to dict
+            memory_dicts = []
+            for result in results:
+                memory_dicts.append({
+                    "id": result.memory_id,
+                    "agent_id": agent_id,
+                    "content": result.content,
+                    "memory_type": result.memory_type.value,
+                    "similarity": result.similarity,
+                    "importance_score": result.importance_score,
+                    "strength_score": result.strength_score,
+                    "last_accessed_at": result.last_accessed_at,
+                    "tags": result.tags,
+                    "metadata": result.metadata
+                })
+            return memory_dicts
+        except Exception as e:
+            logger.error(f"Failed to query memory for agent {agent_id}: {e}")
+            return []
+
     async def search_memories(self, query: MemoryQuery) -> List[MemoryResult]:
         """
         Search memories using semantic similarity.
@@ -228,76 +436,160 @@ class MemorySystem:
         query_embedding = get_embedding(query.query_text)
         query_embedding_list = query_embedding.tolist() if hasattr(query_embedding, 'tolist') else query_embedding
 
-        # Build SQL query
-        sql = """
-            SELECT id, agent_id, memory_type, content, importance_score,
-                   strength_score, last_accessed_at, tags, metadata,
-                   content_embedding <=> $1 as similarity
-            FROM memories
-            WHERE 1=1
-        """
-        params = [query_embedding_list]
-        param_index = 2
+        memory_ids_from_chromadb = []
+        chromadb_similarities = {}
 
-        # Apply filters
-        if query.agent_id:
-            sql += f" AND agent_id = ${param_index}"
-            params.append(query.agent_id)
-            param_index += 1
+        # Try ChromaDB search first if enabled
+        if self.use_chromadb and self.chroma_client:
+            try:
+                chromadb_results = await self._search_memories_in_chromadb(
+                    query_embedding=query_embedding_list,
+                    memory_types=query.memory_types,
+                    agent_id=query.agent_id,
+                    limit=query.limit * 2,  # Get extra for filtering
+                    min_similarity=query.min_similarity
+                )
 
-        if query.memory_types:
-            type_values = [mt.value for mt in query.memory_types]
-            sql += f" AND memory_type = ANY(${param_index})"
-            params.append(type_values)
-            param_index += 1
+                for memory_id, similarity in chromadb_results:
+                    memory_ids_from_chromadb.append(memory_id)
+                    chromadb_similarities[memory_id] = similarity
 
-        if query.tags:
-            sql += f" AND tags && ${param_index}"
-            params.append(query.tags)
-            param_index += 1
+                logger.debug(f"ChromaDB found {len(memory_ids_from_chromadb)} candidate memories")
 
-        # Add similarity threshold
-        sql += f" AND (content_embedding <=> $1) <= (1 - ${param_index})"
-        params.append(query.min_similarity)
+            except Exception as e:
+                logger.warning(f"ChromaDB search failed: {e}. Falling back to PostgreSQL.")
 
-        # Order by similarity and importance
-        sql += f" ORDER BY similarity ASC, importance_score DESC LIMIT ${param_index}"
-        params.append(query.limit)
-
-        # Execute query
-        rows = await db.fetch_all(sql, *params)
-
-        # Convert to MemoryResult objects
+        # Fetch memory details from PostgreSQL
         results = []
-        for row in rows:
-            similarity = 1.0 - float(row["similarity"])  # Convert distance to similarity
-
-            # Apply recency weighting
-            final_score = similarity
-            if query.recency_weight > 0 and row["last_accessed_at"]:
-                hours_ago = (datetime.now() - row["last_accessed_at"]).total_seconds() / 3600
-                recency_factor = max(0, 1 - (hours_ago / 168))  # Decay over 1 week
-                final_score = (similarity * (1 - query.recency_weight) +
-                              recency_factor * query.recency_weight)
-
-            result = MemoryResult(
-                memory_id=row["id"],
-                content=row["content"],
-                memory_type=MemoryType(row["memory_type"]),
-                similarity=final_score,
-                importance_score=row["importance_score"],
-                strength_score=row["strength_score"],
-                last_accessed_at=row["last_accessed_at"],
-                tags=row["tags"],
-                metadata=row["metadata"]
+        if memory_ids_from_chromadb:
+            # Fetch details for memories found in ChromaDB
+            rows = await db.fetch_all(
+                """
+                SELECT id, agent_id, memory_type, content, importance_score,
+                       strength_score, last_accessed_at, tags, metadata
+                FROM memories
+                WHERE id = ANY($1)
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                """,
+                memory_ids_from_chromadb
             )
-            results.append(result)
 
-        # Sort by final score
-        results.sort(key=lambda x: x.similarity, reverse=True)
+            # Convert to MemoryResult objects with ChromaDB similarity scores
+            for row in rows:
+                memory_id = row["id"]
+                similarity = chromadb_similarities.get(memory_id, 0.5)
+
+                # Apply recency weighting
+                final_score = similarity
+                if query.recency_weight > 0 and row["last_accessed_at"]:
+                    hours_ago = (datetime.now() - row["last_accessed_at"]).total_seconds() / 3600
+                    recency_factor = max(0, 1 - (hours_ago / 168))  # Decay over 1 week
+                    final_score = (similarity * (1 - query.recency_weight) +
+                                  recency_factor * query.recency_weight)
+
+                # Apply additional filters (tags, etc.)
+                if query.tags:
+                    memory_tags = row["tags"] or []
+                    if not any(tag in memory_tags for tag in query.tags):
+                        continue  # Skip memories that don't match tag filter
+
+                result = MemoryResult(
+                    memory_id=memory_id,
+                    content=row["content"],
+                    memory_type=MemoryType(row["memory_type"]),
+                    similarity=final_score,
+                    importance_score=row["importance_score"],
+                    strength_score=row["strength_score"],
+                    last_accessed_at=row["last_accessed_at"],
+                    tags=row["tags"],
+                    metadata=row["metadata"]
+                )
+                results.append(result)
+
+            # Sort by final score
+            results.sort(key=lambda x: x.similarity, reverse=True)
+            results = results[:query.limit]
+
+        # Fallback to PostgreSQL-only search if ChromaDB didn't return enough results
+        if len(results) < query.limit:
+            logger.debug(f"ChromaDB returned insufficient results ({len(results)}), falling back to PostgreSQL")
+
+            # Build SQL query for PostgreSQL fallback
+            sql = """
+                SELECT id, agent_id, memory_type, content, importance_score,
+                       strength_score, last_accessed_at, tags, metadata,
+                       content_embedding <=> $1 as similarity
+                FROM memories
+                WHERE 1=1
+            """
+            params = [query_embedding_list]
+            param_index = 2
+
+            # Apply filters
+            if query.agent_id:
+                sql += f" AND agent_id = ${param_index}"
+                params.append(query.agent_id)
+                param_index += 1
+
+            if query.memory_types:
+                type_values = [mt.value for mt in query.memory_types]
+                sql += f" AND memory_type = ANY(${param_index})"
+                params.append(type_values)
+                param_index += 1
+
+            if query.tags:
+                sql += f" AND tags && ${param_index}"
+                params.append(query.tags)
+                param_index += 1
+
+            # Add similarity threshold
+            sql += f" AND (content_embedding <=> $1) <= (1 - ${param_index})"
+            params.append(query.min_similarity)
+
+            # Order by similarity and importance
+            sql += f" ORDER BY similarity ASC, importance_score DESC LIMIT ${param_index}"
+            params.append(query.limit)
+
+            # Execute query
+            rows = await db.fetch_all(sql, *params)
+
+            # Convert to MemoryResult objects
+            for row in rows:
+                memory_id = row["id"]
+                # Skip memories already included from ChromaDB
+                if any(r.memory_id == memory_id for r in results):
+                    continue
+
+                similarity = 1.0 - float(row["similarity"])  # Convert distance to similarity
+
+                # Apply recency weighting
+                final_score = similarity
+                if query.recency_weight > 0 and row["last_accessed_at"]:
+                    hours_ago = (datetime.now() - row["last_accessed_at"]).total_seconds() / 3600
+                    recency_factor = max(0, 1 - (hours_ago / 168))  # Decay over 1 week
+                    final_score = (similarity * (1 - query.recency_weight) +
+                                  recency_factor * query.recency_weight)
+
+                result = MemoryResult(
+                    memory_id=memory_id,
+                    content=row["content"],
+                    memory_type=MemoryType(row["memory_type"]),
+                    similarity=final_score,
+                    importance_score=row["importance_score"],
+                    strength_score=row["strength_score"],
+                    last_accessed_at=row["last_accessed_at"],
+                    tags=row["tags"],
+                    metadata=row["metadata"]
+                )
+                results.append(result)
+
+            # Sort by final score
+            results.sort(key=lambda x: x.similarity, reverse=True)
+            results = results[:query.limit]
 
         # Update access times for retrieved memories
-        await self._update_access_times([r.memory_id for r in results])
+        if results:
+            await self._update_access_times([r.memory_id for r in results])
 
         logger.info(f"Found {len(results)} memories for query")
         return results

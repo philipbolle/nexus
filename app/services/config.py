@@ -4,6 +4,7 @@ Central configuration for AI cost optimization services.
 """
 
 import os
+import logging
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,7 +16,7 @@ class DatabaseConfig:
     port: int = int(os.getenv("POSTGRES_PORT", "5432"))
     name: str = os.getenv("POSTGRES_DB", "nexus_db")
     user: str = os.getenv("POSTGRES_USER", "nexus")
-    password: str = os.getenv("POSTGRES_PASSWORD", "nexus_secure_b2fcd2b1e4056f11")
+    password: str = os.getenv("POSTGRES_PASSWORD", "")
     
     @property
     def connection_string(self) -> str:
@@ -27,7 +28,7 @@ class RedisConfig:
     """Redis configuration for caching."""
     host: str = os.getenv("REDIS_HOST", "localhost")
     port: int = int(os.getenv("REDIS_PORT", "6379"))
-    password: str = os.getenv("REDIS_PASSWORD", "redis_secure_46cbc763b7fcfd02")
+    password: str = os.getenv("REDIS_PASSWORD", "")
     db: int = int(os.getenv("REDIS_DB", "0"))
     
     @property
@@ -83,7 +84,7 @@ class CostOptimizationConfig:
     
     # Cost alerts
     daily_budget: float = 1.0  # $1 per day
-    monthly_budget: float = 30.0  # $30 per month
+    monthly_budget: float = 3.0  # $3 per month
     alert_threshold_percent: float = 0.8  # Alert at 80% of budget
     
     # Semantic cache similarity threshold
@@ -286,9 +287,11 @@ config = CostOptimizationServicesConfig()
 
 if __name__ == "__main__":
     # Test the configuration
-    print("Loaded configuration:")
-    print(f"Database: {config.database.connection_string}")
-    print(f"Redis: {config.redis.connection_string}")
-    print(f"Enabled providers: {list(config.get_enabled_providers().keys())}")
-    print(f"Available models: {list(config.get_available_models().keys())}")
-    print(f"General cascade: {config.get_model_cascade('general')}")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logger = logging.getLogger(__name__)
+    logger.info("Loaded configuration:")
+    logger.info(f"Database: {config.database.connection_string}")
+    logger.info(f"Redis: {config.redis.connection_string}")
+    logger.info(f"Enabled providers: {list(config.get_enabled_providers().keys())}")
+    logger.info(f"Available models: {list(config.get_available_models().keys())}")
+    logger.info(f"General cascade: {config.get_model_cascade('general')}")

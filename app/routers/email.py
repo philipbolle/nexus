@@ -2,12 +2,14 @@
 NEXUS Email API Endpoints
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 import logging
 
 from ..agents.email_intelligence import scan_emails, get_email_stats
+from ..agents.registry import AgentRegistry
+from ..services.email_client import send_email
 from ..services.email_learner import (
     record_feedback, get_learning_stats,
     get_vip_senders, get_blocked_senders
@@ -18,6 +20,20 @@ from ..services.insight_engine import (
 )
 from ..services.ai_providers import get_provider_stats
 from ..database import db
+
+# Dependency for email agent
+async def get_email_agent() -> Optional[Any]:
+    """Get email intelligence agent instance."""
+    try:
+        registry = AgentRegistry()
+        agent = await registry.get_agent_by_name("Email Intelligence Agent")
+        if agent:
+            return agent
+        logger.warning("Email agent not found in registry, using direct functions")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get email agent: {e}")
+        return None
 
 router = APIRouter(prefix="/email", tags=["email"])
 logger = logging.getLogger(__name__)
@@ -39,10 +55,25 @@ class PreferenceUpdate(BaseModel):
     preference: str  # 'vip', 'block', 'normal'
 
 
+class SendEmailRequest(BaseModel):
+    account: str = "gmail"  # "gmail" or "icloud"
+    to_addresses: List[str]
+    subject: str
+    body: str
+    cc_addresses: Optional[List[str]] = None
+    bcc_addresses: Optional[List[str]] = None
+    is_html: bool = False
+    reply_to: Optional[str] = None
+
+
 # Endpoints
 
 @router.post("/scan")
-async def trigger_scan(request: ScanRequest, background_tasks: BackgroundTasks):
+async def trigger_scan(
+    request: ScanRequest,
+    background_tasks: BackgroundTasks,
+    email_agent: Optional[Any] = Depends(get_email_agent)
+) -> Dict[str, Any]:
     """
     Trigger a full email scan.
 
@@ -63,6 +94,21 @@ async def trigger_scan(request: ScanRequest, background_tasks: BackgroundTasks):
             }
 
         # Run immediately for small scans
+        if email_agent:
+            # Use agent framework for tracking and session management
+            task = {
+                "type": "scan_emails",
+                "since_days": request.since_days,
+                "limit": request.limit
+            }
+            result = await email_agent.execute(task)
+            if result.get("success"):
+                return {"status": "completed", "results": result.get("results", {})}
+            else:
+                logger.error(f"Agent scan failed: {result.get('error')}")
+                # Fall back to direct function
+
+        # Direct function call (fallback or no agent available)
         results = await scan_emails(
             since_days=request.since_days,
             limit=request.limit
@@ -75,7 +121,7 @@ async def trigger_scan(request: ScanRequest, background_tasks: BackgroundTasks):
 
 
 @router.post("/feedback")
-async def submit_feedback(request: FeedbackRequest):
+async def submit_feedback(request: FeedbackRequest) -> Dict[str, Any]:
     """
     Submit feedback on an email classification.
 
@@ -113,7 +159,7 @@ async def submit_feedback(request: FeedbackRequest):
 
 
 @router.get("/insights")
-async def get_insights(limit: int = 10, unseen_only: bool = True):
+async def get_insights(limit: int = 10, unseen_only: bool = True) -> Dict[str, Any]:
     """
     Get cross-life insights from email analysis.
 
@@ -129,14 +175,14 @@ async def get_insights(limit: int = 10, unseen_only: bool = True):
 
 
 @router.post("/insights/generate")
-async def trigger_insight_generation(background_tasks: BackgroundTasks):
+async def trigger_insight_generation(background_tasks: BackgroundTasks) -> Dict[str, Any]:
     """Generate new insights from recent data."""
     background_tasks.add_task(generate_insights)
     return {"status": "started", "message": "Generating insights in background"}
 
 
 @router.post("/insights/{insight_id}/seen")
-async def mark_seen(insight_id: str):
+async def mark_seen(insight_id: str) -> Dict[str, Any]:
     """Mark an insight as seen."""
     success = await mark_insight_seen(insight_id)
     if success:
@@ -145,7 +191,7 @@ async def mark_seen(insight_id: str):
 
 
 @router.get("/summary")
-async def get_summary():
+async def get_summary() -> Dict[str, Any]:
     """
     Get daily/weekly digest summary.
 
@@ -164,7 +210,7 @@ async def get_summary():
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(email_agent: Optional[Any] = Depends(get_email_agent)) -> Dict[str, Any]:
     """
     Get email processing statistics.
 
@@ -174,7 +220,17 @@ async def get_stats():
     - Learning statistics
     """
     try:
-        email_stats = await get_email_stats()
+        # Get email stats via agent if available
+        email_stats = None
+        if email_agent:
+            task = {"type": "get_stats"}
+            result = await email_agent.execute(task)
+            if result.get("success"):
+                email_stats = result.get("stats", {})
+
+        if email_stats is None:
+            email_stats = await get_email_stats()
+
         provider_stats = await get_provider_stats()
         learning_stats = await get_learning_stats()
 
@@ -189,7 +245,7 @@ async def get_stats():
 
 
 @router.get("/preferences")
-async def get_preferences():
+async def get_preferences() -> Dict[str, Any]:
     """Get current email preferences (VIPs, blocked, etc.)."""
     try:
         vips = await get_vip_senders()
@@ -207,7 +263,7 @@ async def get_preferences():
 
 
 @router.post("/preferences")
-async def update_preference(request: PreferenceUpdate):
+async def update_preference(request: PreferenceUpdate) -> Dict[str, Any]:
     """
     Manually update email preferences.
 
@@ -254,21 +310,19 @@ async def update_preference(request: PreferenceUpdate):
 
 
 @router.get("/recent")
-async def get_recent_emails(limit: int = 20, classification: Optional[str] = None):
+async def get_recent_emails(limit: int = 20, classification: Optional[str] = None) -> Dict[str, Any]:
     """Get recently processed emails."""
     try:
         query = """
             SELECT id, account, sender, sender_name, subject, classification,
                    importance_score, summary, action_taken, received_at
             FROM processed_emails
-            {where_clause}
+            WHERE classification = $2 OR $2 IS NULL
             ORDER BY received_at DESC
             LIMIT $1
-        """.format(
-            where_clause=f"WHERE classification = '{classification}'" if classification else ""
-        )
+        """
 
-        results = await db.fetch_all(query, limit)
+        results = await db.fetch_all(query, limit, classification)
 
         return {
             "emails": [
@@ -290,4 +344,41 @@ async def get_recent_emails(limit: int = 20, classification: Optional[str] = Non
 
     except Exception as e:
         logger.error(f"Failed to get recent emails: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/send")
+async def send_email_endpoint(request: SendEmailRequest) -> Dict[str, Any]:
+    """
+    Send an email.
+
+    Uses SMTP with configured email accounts (Gmail or iCloud).
+    Same app password used for IMAP also works for SMTP.
+    """
+    try:
+        result = await send_email(
+            account=request.account,
+            to_addresses=request.to_addresses,
+            subject=request.subject,
+            body=request.body,
+            cc_addresses=request.cc_addresses,
+            bcc_addresses=request.bcc_addresses,
+            is_html=request.is_html,
+            reply_to=request.reply_to
+        )
+
+        if result.get("success"):
+            return {
+                "status": "sent",
+                "message_id": result.get("message_id"),
+                "account": result.get("account"),
+                "recipients": result.get("recipients")
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to send email"))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
         raise HTTPException(status_code=500, detail=str(e))

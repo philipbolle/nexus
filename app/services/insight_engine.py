@@ -182,7 +182,7 @@ async def analyze_bill_trends() -> List[Dict[str, Any]]:
                     "data": {"company": bill["company"], "current": current, "previous": previous},
                     "importance": "medium"
                 })
-        except:
+        except Exception:
             continue
 
     return insights

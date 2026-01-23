@@ -6,6 +6,7 @@ Provides standardized way for agents to interact with external systems.
 """
 
 import asyncio
+import ast
 import inspect
 import logging
 import json
@@ -16,6 +17,14 @@ import uuid
 from datetime import datetime
 
 from ..database import db
+
+# Optional web search import
+try:
+    from duckduckgo_search import DDGS
+    DDGS_AVAILABLE = True
+except ImportError:
+    DDGS_AVAILABLE = False
+    DDGS = None
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +39,8 @@ class ToolType(Enum):
     AUTOMATION = "automation"
     ANALYSIS = "analysis"
     PYTHON_FUNCTION = "python_function"
+    WEB_SEARCH = "web_search"
+    HOME_AUTOMATION = "home_automation"
     OTHER = "other"
 
 
@@ -707,11 +718,70 @@ class ToolSystem:
             ]
         )
 
+        # Web search tool
+        web_search_tool = ToolDefinition(
+            name="web_search",
+            display_name="Web Search",
+            description="Search the web for current information using DuckDuckGo",
+            tool_type=ToolType.WEB_SEARCH,
+            parameters=[
+                ToolParameter(
+                    name="query",
+                    type="string",
+                    description="Search query",
+                    required=True
+                ),
+                ToolParameter(
+                    name="max_results",
+                    type="integer",
+                    description="Maximum number of results to return (1-10)",
+                    required=False,
+                    default=5,
+                    min=1,
+                    max=10
+                )
+            ],
+            timeout_seconds=15
+        )
+
+        # Home Assistant automation tool
+        home_assistant_tool = ToolDefinition(
+            name="home_assistant_action",
+            display_name="Home Assistant Action",
+            description="Control Home Assistant devices and services (iPhone, Apple Watch, AirPods, lights, etc.)",
+            tool_type=ToolType.HOME_AUTOMATION,
+            parameters=[
+                ToolParameter(
+                    name="action",
+                    type="string",
+                    description="Action to perform: call_service, get_state, toggle",
+                    required=True,
+                    enum=["call_service", "get_state", "toggle"]
+                ),
+                ToolParameter(
+                    name="entity_id",
+                    type="string",
+                    description="Home Assistant entity ID (e.g., light.living_room, device_tracker.iphone)",
+                    required=True
+                ),
+                ToolParameter(
+                    name="service_data",
+                    type="object",
+                    description="Additional service data (for call_service)",
+                    required=False,
+                    default={}
+                )
+            ],
+            timeout_seconds=10
+        )
+
         # Register built-in implementations
         builtin_tools = [
             (db_query_tool, self._execute_database_query),
             (notification_tool, self._send_notification),
             (calculator_tool, self._calculate_expression),
+            (web_search_tool, self._web_search),
+            (home_assistant_tool, self._home_assistant_action),
         ]
 
         for definition, implementation in builtin_tools:
@@ -1052,8 +1122,8 @@ class ToolSystem:
 
     async def _calculate_expression(self, expression: str) -> Dict[str, Any]:
         """Calculate a mathematical expression."""
-        # Very basic calculator - in production, use a safe eval library
-        # This is a simplified implementation for demonstration
+        # Safe calculator using ast.parse with restricted operations
+        # This implementation safely evaluates mathematical expressions
 
         # Safe expression validation
         allowed_chars = set("0123456789+-*/.() ")
@@ -1064,9 +1134,45 @@ class ToolSystem:
             )
 
         try:
-            # VERY SIMPLIFIED - NOT SAFE FOR PRODUCTION
-            # In production, use a proper math evaluation library
-            result = eval(expression, {"__builtins__": {}}, {})
+            # Safe evaluation using ast.parse and restricted operations
+            import ast
+            import operator
+
+            # Define safe operations
+            safe_operators = {
+                ast.Add: operator.add,
+                ast.Sub: operator.sub,
+                ast.Mult: operator.mul,
+                ast.Div: operator.truediv,
+                ast.USub: operator.neg,
+                ast.UAdd: operator.pos,
+            }
+
+            def safe_eval(node):
+                if isinstance(node, ast.BinOp):
+                    left = safe_eval(node.left)
+                    right = safe_eval(node.right)
+                    op_type = type(node.op)
+                    if op_type not in safe_operators:
+                        raise ValueError(f"Unsafe operator: {op_type}")
+                    return safe_operators[op_type](left, right)
+                elif isinstance(node, ast.UnaryOp):
+                    operand = safe_eval(node.operand)
+                    op_type = type(node.op)
+                    if op_type not in safe_operators:
+                        raise ValueError(f"Unsafe operator: {op_type}")
+                    return safe_operators[op_type](operand)
+                elif isinstance(node, ast.Num):  # Python 3.7 compatibility
+                    return node.n
+                elif isinstance(node, ast.Constant):  # Python 3.8+
+                    return node.value
+                else:
+                    raise ValueError(f"Unsafe AST node: {type(node)}")
+
+            # Parse the expression
+            tree = ast.parse(expression, mode='eval')
+            result = safe_eval(tree.body)
+
             return {
                 "expression": expression,
                 "result": result,
@@ -1074,6 +1180,60 @@ class ToolSystem:
             }
         except Exception as e:
             raise ToolExecutionError("calculate", f"Calculation error: {e}")
+
+    async def _web_search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+        """Search the web using DuckDuckGo."""
+        if not DDGS_AVAILABLE:
+            raise ToolExecutionError(
+                "web_search",
+                "DuckDuckGo Search library not installed. Install with: pip install duckduckgo-search"
+            )
+
+        try:
+            # Use synchronous DDGS in a thread pool to avoid blocking
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
+
+            def sync_search():
+                results = []
+                with DDGS() as ddgs:
+                    for result in ddgs.text(query, max_results=max_results):
+                        results.append({
+                            "title": result.get("title", ""),
+                            "body": result.get("body", ""),
+                            "url": result.get("href", ""),
+                            "rank": len(results) + 1
+                        })
+                return results
+
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor() as pool:
+                results = await loop.run_in_executor(pool, sync_search)
+
+            if not results:
+                return [{"message": "No results found for query", "query": query}]
+
+            return results
+
+        except Exception as e:
+            raise ToolExecutionError("web_search", f"Search failed: {str(e)}")
+
+    async def _home_assistant_action(self, action: str, entity_id: str, service_data: Optional[Dict] = None) -> Dict[str, Any]:
+        """Execute a Home Assistant action (stub - needs configuration)."""
+        logger.info(f"Home Assistant action requested: {action} on {entity_id} with data {service_data}")
+
+        # Placeholder implementation
+        # In production, this would call Home Assistant API with authentication
+        # Example: POST to http://localhost:8123/api/services/{domain}/{service}
+
+        return {
+            "status": "success",
+            "message": "Home Assistant tool is configured but not fully implemented. Needs HA access token and configuration.",
+            "action": action,
+            "entity_id": entity_id,
+            "service_data": service_data or {},
+            "timestamp": datetime.now().isoformat()
+        }
 
     async def register_tool_from_api(
         self,
