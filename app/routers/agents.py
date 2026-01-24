@@ -34,6 +34,7 @@ from ..agents.decision_support import register_decision_support_agent
 from ..agents.code_review import register_code_review_agent
 from ..agents.schema_guardian import register_schema_guardian_agent
 from ..agents.test_synchronizer import register_test_synchronizer_agent
+from ..agents.git_operations import register_git_operations_agent
 from ..agents.sessions import SessionManager, SessionConfig
 from ..agents.orchestrator import OrchestratorEngine
 from ..agents.memory import MemorySystem
@@ -110,6 +111,13 @@ async def initialize_agent_framework() -> None:
             logger.info("Test synchronizer agent registered successfully")
         except Exception as e:
             logger.warning(f"Failed to register test synchronizer agent: {e}. System will continue without test synchronizer agent.")
+
+        # Register git operations agent
+        try:
+            await register_git_operations_agent()
+            logger.info("Git operations agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register git operations agent: {e}. System will continue without git operations agent.")
 
         _components_initialized = True
         logger.info("Agent framework components initialized successfully")

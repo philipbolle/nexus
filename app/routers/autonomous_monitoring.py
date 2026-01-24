@@ -216,8 +216,8 @@ async def get_monitoring_status() -> Dict[str, Any]:
                 }
             },
             "recent_activity": {
-                "validations": recent_validations.get("metrics", [])[:5] if recent_validations else [],
-                "active_alerts": len(system_health.get("active_alerts", [])),
+                "validations": (recent_validations.get("metrics") or [])[:5] if recent_validations else [],
+                "active_alerts": len(system_health.get("active_alerts") or []),
                 "system_status": system_health.get("overall_status", "unknown")
             },
             "recommendations": [
