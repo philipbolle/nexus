@@ -4,5 +4,31 @@ Tasks that absolutely cannot be automated by AI agents, even with user approval.
 These tasks are automatically logged by NEXUS systems when they encounter
 scenarios they cannot handle.
 
-**Last Updated**: 2026-01-24 00:05:02
+**Last Updated**: 2026-01-24
+
+## 📊 Reminder: Try New Nexus Status Dashboard
+
+**Task**: Test the full custom dashboard created today
+**Priority**: Medium
+**Category**: Testing/Review
+**Status**: Pending
+**Created**: 2026-01-24
+**Due**: Today
+
+### Dashboard Details:
+- **Full Dashboard**: `python scripts/nexus_status.py` (requires virtual environment)
+- **Simple Dashboard**: `python3 scripts/nexus_status_simple.py` (no dependencies)
+- **Quick Check**: `./scripts/nexus_quick_status.sh` (bash one-liner)
+
+### Instructions:
+1. Activate virtual environment: `source venv/bin/activate`
+2. Run full dashboard: `python scripts/nexus_status.py`
+3. Review the colorful output showing system health, 55 agents, finances, etc.
+4. Try the simple version for comparison
+
+### Why This is Cool:
+- Instant visibility into Nexus during night shifts
+- Shows agent count reduced from 144 to 55 (optimized!)
+- Displays monthly spending and system metrics
+- Colorful output with emojis and progress bars
 
