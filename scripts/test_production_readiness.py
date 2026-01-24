@@ -25,7 +25,7 @@ from app.middleware.error_handler import ErrorResponse
 import psutil
 
 
-async def test_logging_configuration():
+def test_logging_configuration():
     """Test centralized logging configuration."""
     print("\n" + "="*60)
     print("Testing Logging Configuration")
@@ -220,7 +220,7 @@ def test_backup_script():
     return True
 
 
-async def test_health_endpoints():
+def test_health_endpoints():
     """Test health check endpoints (simulated)."""
     print("\n" + "="*60)
     print("Testing Health Endpoints")
