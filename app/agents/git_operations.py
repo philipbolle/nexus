@@ -12,6 +12,7 @@ import json
 import subprocess
 import os
 import re
+import httpx
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ from ..exceptions.manual_tasks import (
 from .base import BaseAgent, AgentType, AgentStatus, DomainAgent
 from .tools import ToolSystem, ToolDefinition, ToolParameter
 from .memory import MemorySystem
+from .monitoring import performance_monitor, MetricType
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,13 @@ class GitOperationsAgent(DomainAgent):
                 "allow_force_push": False,
                 "require_pr_for_main": True,
                 "test_before_push": True,
-                "backup_before_operations": True
+                "backup_before_operations": True,
+                # Webhook integration for n8n workflows
+                "enable_webhooks": True,
+                "webhook_base_url": "http://localhost:5678/webhook",
+                "webhook_timeout": 10,
+                "webhook_retries": 3,
+                "webhook_events": ["commit", "push", "conflict", "branch", "rollback"]
             }
 
         # Extract domain from kwargs if provided (used by registry)
@@ -435,7 +443,7 @@ class GitOperationsAgent(DomainAgent):
         if not skip_validation and self.config.get("enable_safety_checks", True):
             safety_result = await self._validate_safety({"operation": "commit"}, context)
             if not safety_result.get("success", False):
-                self._update_git_metric("git_validation_failures")
+                await self._update_git_metric("git_validation_failures")
                 return safety_result
 
         try:
@@ -452,7 +460,26 @@ class GitOperationsAgent(DomainAgent):
             commit_hash = await self._execute_git_command(["rev-parse", "HEAD"])
 
             # Update metrics
-            self._update_git_metric("git_commits")
+            await self._update_git_metric("git_commits")
+
+            # Send webhook notification
+            try:
+                await self._send_webhook_notification(
+                    event_type="commit",
+                    data={
+                        "commit_hash": commit_hash.strip(),
+                        "message": commit_message,
+                        "files": files if files else ["all"],
+                        "summary": commit_result.strip()
+                    },
+                    event_data={
+                        "agent_id": self.agent_id,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                )
+            except Exception as webhook_error:
+                logger.warning(f"Failed to send commit webhook: {webhook_error}")
+                # Don't fail the commit if webhook fails
 
             return {
                 "success": True,
@@ -494,7 +521,7 @@ class GitOperationsAgent(DomainAgent):
         protected_branches = self.config.get("protected_branches", ["main"])
         if branch in protected_branches:
             if force and not self.config.get("allow_force_push", False):
-                self._update_git_metric("git_manual_interventions")
+                await self._update_git_metric("git_manual_interventions")
                 raise ManualInterventionRequired(
                     title="Protected Branch Force Push",
                     description=f"Force push to protected branch '{branch}' requires manual approval",
@@ -511,7 +538,7 @@ class GitOperationsAgent(DomainAgent):
         if self.config.get("enable_safety_checks", True):
             safety_result = await self._validate_safety({"operation": "push", "target_branch": branch}, context)
             if not safety_result.get("success", False):
-                self._update_git_metric("git_validation_failures")
+                await self._update_git_metric("git_validation_failures")
                 return safety_result
 
         # Check for PR requirement for main branch
@@ -519,7 +546,7 @@ class GitOperationsAgent(DomainAgent):
             # Check if there's an open PR
             has_pr = await self._check_open_pr(branch)
             if not has_pr:
-                self._update_git_metric("git_manual_interventions")
+                await self._update_git_metric("git_manual_interventions")
                 raise ManualInterventionRequired(
                     title="PR Required for Main Branch",
                     description=f"Direct push to main branch requires an open pull request",
@@ -540,7 +567,27 @@ class GitOperationsAgent(DomainAgent):
             push_result = await self._execute_git_command(push_cmd)
 
             # Update metrics
-            self._update_git_metric("git_pushes")
+            await self._update_git_metric("git_pushes")
+
+            # Send webhook notification
+            try:
+                await self._send_webhook_notification(
+                    event_type="push",
+                    data={
+                        "branch": branch,
+                        "dry_run": dry_run,
+                        "force": force,
+                        "result": push_result.strip(),
+                        "success": True
+                    },
+                    event_data={
+                        "agent_id": self.agent_id,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                )
+            except Exception as webhook_error:
+                logger.warning(f"Failed to send push webhook: {webhook_error}")
+                # Don't fail the push if webhook fails
 
             return {
                 "success": True,
@@ -599,7 +646,26 @@ class GitOperationsAgent(DomainAgent):
                 result = await self._execute_git_command(create_cmd)
 
                 # Update metrics
-                self._update_git_metric("git_branches_created")
+                await self._update_git_metric("git_branches_created")
+
+                # Send webhook notification
+                try:
+                    await self._send_webhook_notification(
+                        event_type="branch",
+                        data={
+                            "operation": "create",
+                            "branch": branch_name,
+                            "from_branch": from_branch,
+                            "result": result.strip()
+                        },
+                        event_data={
+                            "agent_id": self.agent_id,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    )
+                except Exception as webhook_error:
+                    logger.warning(f"Failed to send branch create webhook: {webhook_error}")
+                    # Don't fail the operation if webhook fails
 
                 return {
                     "success": True,
@@ -621,6 +687,24 @@ class GitOperationsAgent(DomainAgent):
                 # Switch to branch
                 result = await self._execute_git_command(["checkout", branch_name])
 
+                # Send webhook notification
+                try:
+                    await self._send_webhook_notification(
+                        event_type="branch",
+                        data={
+                            "operation": "switch",
+                            "branch": branch_name,
+                            "result": result.strip()
+                        },
+                        event_data={
+                            "agent_id": self.agent_id,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    )
+                except Exception as webhook_error:
+                    logger.warning(f"Failed to send branch switch webhook: {webhook_error}")
+                    # Don't fail the operation if webhook fails
+
                 return {
                     "success": True,
                     "operation": "switch",
@@ -641,7 +725,25 @@ class GitOperationsAgent(DomainAgent):
                 result = await self._execute_git_command(["branch", "-d", branch_name])
 
                 # Update metrics
-                self._update_git_metric("git_branches_deleted")
+                await self._update_git_metric("git_branches_deleted")
+
+                # Send webhook notification
+                try:
+                    await self._send_webhook_notification(
+                        event_type="branch",
+                        data={
+                            "operation": "delete",
+                            "branch": branch_name,
+                            "result": result.strip()
+                        },
+                        event_data={
+                            "agent_id": self.agent_id,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    )
+                except Exception as webhook_error:
+                    logger.warning(f"Failed to send branch delete webhook: {webhook_error}")
+                    # Don't fail the operation if webhook fails
 
                 return {
                     "success": True,
@@ -748,8 +850,28 @@ class GitOperationsAgent(DomainAgent):
 
         # For now, log manual intervention required
         # In a more advanced implementation, could attempt automatic resolution
-        self._update_git_metric("git_conflicts_detected")
-        self._update_git_metric("git_manual_interventions")
+        await self._update_git_metric("git_conflicts_detected")
+        await self._update_git_metric("git_manual_interventions")
+
+        # Send webhook notification about conflict
+        try:
+            await self._send_webhook_notification(
+                event_type="conflict",
+                data={
+                    "conflict_files": conflict_files,
+                    "conflict_count": len(conflict_files),
+                    "operation": task.get("operation", "unknown")
+                },
+                event_data={
+                    "agent_id": self.agent_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "requires_manual_intervention": True
+                }
+            )
+        except Exception as webhook_error:
+            logger.warning(f"Failed to send conflict webhook: {webhook_error}")
+            # Continue to raise exception even if webhook fails
+
         raise ManualInterventionRequired(
             title="Merge Conflicts Detected",
             description=f"{len(conflict_files)} files have merge conflicts requiring manual resolution",
@@ -775,7 +897,25 @@ class GitOperationsAgent(DomainAgent):
                 # Undo last commit
                 result = await self._execute_git_command(["reset", "--soft", "HEAD~1"])
                 # Update metrics
-                self._update_git_metric("git_rollbacks")
+                await self._update_git_metric("git_rollbacks")
+
+                # Send webhook notification
+                try:
+                    await self._send_webhook_notification(
+                        event_type="rollback",
+                        data={
+                            "operation": "rollback_commit",
+                            "target": target,
+                            "result": result.strip()
+                        },
+                        event_data={
+                            "agent_id": self.agent_id,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    )
+                except Exception as webhook_error:
+                    logger.warning(f"Failed to send rollback webhook: {webhook_error}")
+                    # Don't fail the rollback if webhook fails
 
                 return {
                     "success": True,
@@ -882,13 +1022,32 @@ class GitOperationsAgent(DomainAgent):
 
     # ============ Helper Methods ============
 
-    def _update_git_metric(self, metric_name: str, increment: int = 1) -> None:
+    async def _update_git_metric(self, metric_name: str, increment: int = 1) -> None:
         """Update git-specific metric."""
         if metric_name in self.metrics:
             self.metrics[metric_name] += increment
         else:
             self.metrics[metric_name] = increment
         logger.debug(f"Updated git metric {metric_name}: {self.metrics[metric_name]}")
+
+        # Also record to performance monitoring system for dashboards
+        try:
+            # Map git metric to appropriate metric type
+            metric_type = MetricType.TOOL_USAGE  # Using TOOL_USAGE for git operations
+
+            await performance_monitor.record_metric(
+                agent_id=self.agent_id,
+                metric_type=metric_type,
+                value=self.metrics[metric_name],
+                tags={
+                    "git_metric": metric_name,
+                    "agent_name": self.name,
+                    "domain": self.domain
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record git metric to performance monitor: {e}")
+            # Don't fail the operation if monitoring fails
 
     async def _execute_git_command(self, args: List[str]) -> str:
         """Execute git command and return output."""
@@ -945,6 +1104,58 @@ class GitOperationsAgent(DomainAgent):
         # For now, return True to allow push (simplified)
         return True
 
+    async def _send_webhook_notification(
+        self,
+        event_type: str,
+        data: Dict[str, Any],
+        event_data: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Send webhook notification for git events.
+
+        Args:
+            event_type: Type of git event (commit, push, conflict, branch, rollback)
+            data: Primary event data from the git operation
+            event_data: Additional context data
+        """
+        if not self.config.get("enable_webhooks", True):
+            return
+
+        webhook_events = self.config.get("webhook_events", ["commit", "push", "conflict"])
+        if event_type not in webhook_events:
+            logger.debug(f"Webhook event type '{event_type}' not in enabled events: {webhook_events}")
+            return
+
+        webhook_url = f"{self.config.get('webhook_base_url', 'http://localhost:5678/webhook')}/git-{event_type}"
+        timeout = self.config.get("webhook_timeout", 10)
+        max_retries = self.config.get("webhook_retries", 3)
+
+        payload = {
+            "event_type": event_type,
+            "timestamp": datetime.now().isoformat(),
+            "agent_id": self.agent_id,
+            "agent_name": self.name,
+            "data": data,
+            "context": event_data or {}
+        }
+
+        logger.info(f"Sending webhook for {event_type} event to {webhook_url}")
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(webhook_url, json=payload)
+                    response.raise_for_status()
+                    logger.debug(f"Webhook sent successfully: {response.status_code}")
+                    return
+            except Exception as e:
+                logger.warning(f"Webhook attempt {attempt + 1}/{max_retries} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"All webhook attempts failed for {event_type} event")
+                else:
+                    import asyncio
+                    await asyncio.sleep(1 * (attempt + 1))  # Exponential backoff
+
 
 # ============ Agent Registration Helper ============
 
@@ -996,7 +1207,13 @@ async def register_git_operations_agent() -> GitOperationsAgent:
                 "allow_force_push": False,
                 "require_pr_for_main": True,
                 "test_before_push": True,
-                "backup_before_operations": True
+                "backup_before_operations": True,
+                # Webhook integration for n8n workflows
+                "enable_webhooks": True,
+                "webhook_base_url": "http://localhost:5678/webhook",
+                "webhook_timeout": 10,
+                "webhook_retries": 3,
+                "webhook_events": ["commit", "push", "conflict", "branch", "rollback"]
             }
         )
         logger.info(f"Git operations agent created and registered: {agent.name}")

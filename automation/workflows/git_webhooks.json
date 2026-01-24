@@ -1,0 +1,257 @@
+{
+  "name": "Git Webhooks",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "git-commit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-commit",
+      "name": "Webhook (Commit)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 200],
+      "webhookId": "git-commit-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "git-push",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-push",
+      "name": "Webhook (Push)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 400],
+      "webhookId": "git-push-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "git-conflict",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-conflict",
+      "name": "Webhook (Conflict)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 600],
+      "webhookId": "git-conflict-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "git-branch",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-branch",
+      "name": "Webhook (Branch)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 800],
+      "webhookId": "git-branch-webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "git-rollback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-rollback",
+      "name": "Webhook (Rollback)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 1000],
+      "webhookId": "git-rollback-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst eventType = data.event_type;\nconst timestamp = data.timestamp;\nconst agentName = data.agent_name;\nconst eventData = data.data;\n\nreturn {\n  json: {\n    event_type: eventType,\n    timestamp: timestamp,\n    agent_name: agentName,\n    data: eventData,\n    context: data.context,\n    processed_at: new Date().toISOString(),\n    message: `Git ${eventType} event from ${agentName}`\n  }\n};"
+      },
+      "id": "process-event",
+      "name": "Process Git Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 400]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "additionalFields": {
+          "severity": "info",
+          "message": "={{ $json.message }}",
+          "timestamp": "={{ $json.timestamp }}",
+          "tags": "git,webhook,{{ $json.event_type }}"
+        }
+      },
+      "id": "log-event",
+      "name": "Log Event",
+      "type": "n8n-nodes-base.sentryIo",
+      "typeVersion": 1,
+      "position": [750, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const eventType = $input.first().json.event_type;\nlet notificationMessage = '';\n\nif (eventType === 'conflict') {\n  notificationMessage = `🚨 Git Merge Conflict Detected\\n${$input.first().json.data.conflict_count} files need manual resolution`;\n} else if (eventType === 'push') {\n  notificationMessage = `✅ Git Push Successful\\nBranch: ${$input.first().json.data.branch}`;\n} else if (eventType === 'commit') {\n  notificationMessage = `📝 Git Commit Created\\nMessage: ${$input.first().json.data.message.substring(0, 50)}...`;\n} else if (eventType === 'branch') {\n  notificationMessage = `🌿 Git Branch Operation: ${$input.first().json.data.operation}\\nBranch: ${$input.first().json.data.branch}`;\n} else if (eventType === 'rollback') {\n  notificationMessage = `↩️ Git Rollback Executed\\nOperation: ${$input.first().json.data.operation}`;\n} else {\n  notificationMessage = `ℹ️ Git Event: ${eventType}`;\n}\n\nreturn {\n  json: {\n    notification: notificationMessage,\n    event_type: eventType,\n    priority: eventType === 'conflict' ? 4 : 2\n  }\n};"
+      },
+      "id": "prepare-notification",
+      "name": "Prepare Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 600]
+    },
+    {
+      "parameters": {
+        "topic": "nexus-philip-cd701650d0771943",
+        "message": "={{ $json.notification }}",
+        "title": "NEXUS Git Event",
+        "priority": "={{ $json.priority }}"
+      },
+      "id": "send-ntfy",
+      "name": "Send ntfy Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [750, 600],
+      "credentials": {
+        "httpRequest": {
+          "id": "1",
+          "name": "ntfy"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: \"Git event processed\" }) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 400]
+    }
+  ],
+  "connections": {
+    "Webhook (Commit)": {
+      "main": [
+        [
+          {
+            "node": "Process Git Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Push)": {
+      "main": [
+        [
+          {
+            "node": "Process Git Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Conflict)": {
+      "main": [
+        [
+          {
+            "node": "Process Git Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Branch)": {
+      "main": [
+        [
+          {
+            "node": "Process Git Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Rollback)": {
+      "main": [
+        [
+          {
+            "node": "Process Git Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Git Event": {
+      "main": [
+        [
+          {
+            "node": "Log Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification": {
+      "main": [
+        [
+          {
+            "node": "Send ntfy Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send ntfy Notification": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["git", "nexus", "webhooks"],
+  "triggerCount": 0,
+  "updatedAt": "2026-01-23T00:00:00.000Z",
+  "versionId": "1",
+  "description": "NEXUS Git Operations Webhook Integration - Processes git events (commit, push, conflict, branch, rollback) from GitOperationsAgent and sends notifications."
+}
