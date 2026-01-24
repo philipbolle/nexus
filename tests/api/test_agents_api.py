@@ -83,6 +83,7 @@ class TestAgentsAPI:
         # Mock agent registry
         mock_agent = Mock()
         mock_agent.id = sample_agent_response["id"]
+        mock_agent.agent_id = sample_agent_response["id"]  # Needed by _agent_to_response
         mock_agent.name = sample_agent_response["name"]
         mock_agent.agent_type = AgentType.DOMAIN
         mock_agent.status = AgentStatus.IDLE
