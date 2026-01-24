@@ -1,5 +1,5 @@
 # NEXUS Project Context
-> Auto-generated: 2026-01-24 02:37:10
+> Auto-generated: 2026-01-24 03:57:11
 > Copy this entire file and paste it into any AI (Gemini, Grok, ChatGPT, DeepSeek)
 
 ## What is NEXUS?
@@ -8,12 +8,12 @@ NEXUS is Philip's personal AI operating system - a self-hosted system that manag
 
 ## Current System State
 
-- **PostgreSQL Tables**: 223
-- **Docker Containers**: 7 running
-- **Containers**: nexus-homeassistant: Up 38 hours,nexus-n8n: Up 38 hours,nexus-chromadb: Up 38 hours,nexus-postgres: Up 38 hours (healthy),nexus-syncthing: Up 38 hours (healthy),nexus-vaultwarden: Up 38 hours (healthy),nexus-redis: Up 38 hours,
+- **PostgreSQL Tables**: 
+- **Docker Containers**: 0 running
+- **Containers**: 
 - **Python Files**: 70 in app/
 - **Git Branch**: main
-- **Last Commit**: 64284de session(2026-01-24): Updated: philip-tasks,
+- **Last Commit**: a13c9d0 session(2026-01-24): Updated: NEXUS_CONTEXT.md,
 
 ## Tech Stack
 
@@ -46,7 +46,7 @@ NEXUS is Philip's personal AI operating system - a self-hosted system that manag
 
 ## Database Tables (First 50)
 
-accounts,agent_collaborations,agent_events,agent_experiments,agent_handoffs,agent_learnings,agent_performance,agent_performance_metrics,agent_suggestions,agent_tool_assignments,agent_tools,agent_versions,agents,agents_backup,ai_models,ai_provider_usage,ai_providers,api_keys,api_usage,archives,areas,audit_trail,backup_logs,batch_job_items,batch_jobs,bottleneck_patterns,budgets,car_fuel_logs,car_insurance,car_maintenance_history,car_maintenance_schedule,car_mileage_logs,car_registration,car_vehicles,cascade_decisions,chunking_configs,code_quality_metrics,communication_templates,compound_time_savings,consensus_groups,consensus_log_entries,contact_interactions,contacts,context_snapshots,conversations,cost_alerts,credentials,curriculum,debt_payments,debts,,
+
 
 ## Project Structure
 ~/nexus/
