@@ -592,11 +592,13 @@ class AgentRegistry:
         from .code_review import CodeReviewAgent
         from .schema_guardian import SchemaGuardianAgent
         from .test_synchronizer import TestSynchronizerAgent
+        from .finance_agent import FinanceAgent
 
         builtin_types = {
             "domain": DomainAgent,
             "orchestrator": OrchestratorAgent,
             "email_intelligence": EmailIntelligenceAgent,
+            "finance": FinanceAgent,
             "worker": SwarmAgent,  # Task-specific agents with swarm capabilities
             "supervisor": SwarmAgent,  # Manager agents with swarm capabilities
             "analyzer": DomainAgent,  # Analysis agents (default to DomainAgent)

@@ -35,6 +35,7 @@ from ..agents.code_review import register_code_review_agent
 from ..agents.schema_guardian import register_schema_guardian_agent
 from ..agents.test_synchronizer import register_test_synchronizer_agent
 from ..agents.git_operations import register_git_operations_agent
+from ..agents.finance_agent import register_finance_agent
 from ..agents.sessions import SessionManager, SessionConfig
 from ..agents.orchestrator import OrchestratorEngine
 from ..agents.memory import MemorySystem
@@ -118,6 +119,13 @@ async def initialize_agent_framework() -> None:
             logger.info("Git operations agent registered successfully")
         except Exception as e:
             logger.warning(f"Failed to register git operations agent: {e}. System will continue without git operations agent.")
+
+        # Register finance agent
+        try:
+            await register_finance_agent()
+            logger.info("Finance agent registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register finance agent: {e}. System will continue without finance agent.")
 
         _components_initialized = True
         logger.info("Agent framework components initialized successfully")

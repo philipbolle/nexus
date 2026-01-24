@@ -92,7 +92,10 @@ class GitOperationsAgent(DomainAgent):
                 "webhook_base_url": "http://localhost:5678/webhook",
                 "webhook_timeout": 10,
                 "webhook_retries": 3,
-                "webhook_events": ["commit", "push", "conflict", "branch", "rollback"]
+                "webhook_events": ["commit", "push", "conflict", "branch", "rollback"],
+                # AI-powered features
+                "enable_ai_commit_messages": True,
+                "enable_conflict_prediction": True
             }
 
         # Extract domain from kwargs if provided (used by registry)
@@ -301,10 +304,12 @@ class GitOperationsAgent(DomainAgent):
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "branch_name": {"type": "string", "description": "Name of new branch"},
-                    "from_branch": {"type": "string", "description": "Source branch"}
+                    "branch_name": {"type": "string", "description": "Name of new branch (optional - will be generated if not provided)"},
+                    "from_branch": {"type": "string", "description": "Source branch"},
+                    "purpose": {"type": "string", "description": "Branch purpose (feature, fix, hotfix, chore, docs, test) - default: feature"},
+                    "issue_id": {"type": "string", "description": "Issue/ticket ID for branch naming"}
                 },
-                "required": ["branch_name"]
+                "required": []
             }
         }
         await self.register_tool("git_create_branch", self._tool_git_create_branch, schema)
@@ -324,6 +329,30 @@ class GitOperationsAgent(DomainAgent):
             }
         }
         await self.register_tool("git_validate_safety", self._tool_git_validate_safety, schema)
+
+        # Tool: git_analyze_patterns
+        schema = {
+            "name": "git_analyze_patterns",
+            "display_name": "Analyze Git Patterns",
+            "description": "Analyze git history patterns and suggest workflow improvements",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "branch_count": {"type": "integer"},
+                    "stale_branches": {"type": "array", "items": {"type": "string"}},
+                    "commit_count_30d": {"type": "integer"},
+                    "merge_count_90d": {"type": "integer"},
+                    "recommendations": {"type": "array", "items": {"type": "string"}},
+                    "summary": {"type": "string"}
+                }
+            }
+        }
+        await self.register_tool("git_analyze_patterns", self._tool_git_analyze_patterns, schema)
 
     async def _load_git_config(self) -> None:
         """Load git-specific configuration from database."""
@@ -423,6 +452,28 @@ class GitOperationsAgent(DomainAgent):
         commit_message = task.get("message", "")
         files = task.get("files", [])
         skip_validation = task.get("skip_validation", False)
+
+        # Generate AI commit message if empty and AI is enabled
+        if not commit_message.strip() and self.config.get("enable_ai_commit_messages", True):
+            try:
+                # Get diff for context
+                diff = await self._execute_git_command(["diff", "--cached"])
+                if not diff.strip():
+                    diff = await self._execute_git_command(["diff"])
+
+                # Get branch context
+                branch = await self._execute_git_command(["branch", "--show-current"])
+                context = {
+                    "branch": branch.strip(),
+                    "files": files if files else ["all"],
+                    "repository": self.config.get("repository_path")
+                }
+
+                commit_message = await self._generate_ai_commit_message(diff, context)
+                logger.info(f"Generated AI commit message: {commit_message}")
+            except Exception as e:
+                logger.warning(f"Failed to generate AI commit message: {e}")
+                # Continue with empty message, validation will catch it if required
 
         # Validate commit message
         if self.config.get("require_commit_message", True) and not commit_message.strip():
@@ -554,6 +605,32 @@ class GitOperationsAgent(DomainAgent):
                     context={"branch": branch, "operation": "push"}
                 )
 
+        # Predict conflict risk if enabled
+        if self.config.get("enable_conflict_prediction", True):
+            try:
+                # Get remote branch name (assume same as local)
+                remote = "origin"
+                remote_branch = f"{remote}/{branch}"
+
+                # Check if remote branch exists
+                remote_exists = await self._execute_git_command(["ls-remote", "--heads", remote, branch])
+                if remote_exists.strip():
+                    # Predict conflict risk
+                    prediction = await self._predict_conflict_risk(branch, remote_branch)
+
+                    # Log prediction
+                    logger.info(f"Conflict prediction for {branch} -> {remote_branch}: {prediction['risk_level']} ({prediction['risk_score']:.1f})")
+
+                    # If high risk, add warning to result (but don't block)
+                    if prediction["risk_level"] == "high":
+                        logger.warning(f"High conflict risk detected: {prediction['overlapping_files']}")
+                        # Could raise ManualInterventionRequired for high risk if desired
+                else:
+                    logger.info(f"Remote branch {remote_branch} doesn't exist yet, no conflict prediction needed")
+            except Exception as e:
+                logger.warning(f"Conflict prediction failed: {e}")
+                # Don't fail the push if prediction fails
+
         try:
             # Build push command
             push_cmd = ["push"]
@@ -614,8 +691,14 @@ class GitOperationsAgent(DomainAgent):
         operation = task.get("operation", "create")
         branch_name = task.get("branch_name", "")
         from_branch = task.get("from_branch", None)
+        purpose = task.get("purpose", "feature")
 
-        if not branch_name:
+        # Generate branch name if not provided (only for create operation)
+        if not branch_name and operation == "create":
+            issue_id = task.get("issue_id")
+            branch_name = await self._suggest_branch_name(purpose, issue_id)
+            logger.info(f"Generated branch name: {branch_name}")
+        elif not branch_name:
             return {
                 "success": False,
                 "error": "Branch name is required"
@@ -974,6 +1057,236 @@ class GitOperationsAgent(DomainAgent):
             "report": report
         }
 
+    # ============ AI-Powered Features ============
+
+    async def _generate_ai_commit_message(self, diff: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate AI-powered commit message using diff and context.
+
+        Args:
+            diff: Git diff output
+            context: Additional context (branch, previous commits, etc.)
+
+        Returns:
+            Generated commit message
+        """
+        try:
+            # Prepare prompt for AI
+            prompt = f"""Generate a concise, conventional commit message based on the following git diff.
+Follow conventional commit format: <type>(<scope>): <description>
+
+Examples:
+- feat(auth): add login with Google OAuth
+- fix(api): resolve null pointer in user endpoint
+- docs(readme): update installation instructions
+- chore(deps): update security dependencies
+
+Git diff:
+{diff[:2000]}  # Limit diff size
+
+Context: {context or 'No additional context'}
+
+Provide only the commit message, no explanations."""
+
+            # Use AI service with cost optimization
+            response = await ai_request(
+                prompt=prompt,
+                task_type=TaskType.CLASSIFICATION,  # Classification is cheap
+                model_override="groq"  # Use fastest/cheapest model
+            )
+
+            # Extract commit message from response
+            message = response.strip()
+
+            # Validate it's not empty and follows basic pattern
+            if not message or len(message) > 200:
+                logger.warning(f"AI-generated commit message invalid: {message}")
+                # Fallback to generic message
+                return "chore: update code"
+
+            logger.info(f"AI-generated commit message: {message}")
+            return message
+
+        except Exception as e:
+            logger.error(f"Failed to generate AI commit message: {e}")
+            # Fallback to generic message
+            return "chore: update code"
+
+    async def _predict_conflict_risk(self, source_branch: str, target_branch: str) -> Dict[str, Any]:
+        """
+        Predict risk of merge conflicts between branches.
+
+        Args:
+            source_branch: Branch to merge from
+            target_branch: Branch to merge into
+
+        Returns:
+            Dictionary with risk assessment
+        """
+        try:
+            # Get commit divergence
+            divergence_cmd = await self._execute_git_command([
+                "rev-list", "--count", "--left-right",
+                f"{target_branch}...{source_branch}"
+            ])
+
+            left, right = divergence_cmd.strip().split('\t') if '\t' in divergence_cmd else (0, 0)
+            left_count = int(left) if left.isdigit() else 0
+            right_count = int(right) if right.isdigit() else 0
+
+            # Get file change overlap
+            source_files = await self._execute_git_command([
+                "diff", "--name-only", f"{target_branch}..{source_branch}"
+            ])
+            target_files = await self._execute_git_command([
+                "diff", "--name-only", f"{source_branch}..{target_branch}"
+            ])
+
+            source_set = set(source_files.strip().split('\n')) if source_files.strip() else set()
+            target_set = set(target_files.strip().split('\n')) if target_files.strip() else set()
+            overlapping_files = source_set.intersection(target_set)
+
+            # Calculate risk score (0-100)
+            total_changes = left_count + right_count
+            overlap_ratio = len(overlapping_files) / max(len(source_set) + len(target_set), 1)
+
+            if total_changes == 0:
+                risk_score = 0
+            elif total_changes > 50:
+                risk_score = min(80 + (overlap_ratio * 20), 100)
+            else:
+                risk_score = min(overlap_ratio * 100, 100)
+
+            risk_level = "low" if risk_score < 30 else "medium" if risk_score < 70 else "high"
+
+            return {
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+                "divergence": {"left": left_count, "right": right_count},
+                "overlapping_files": list(overlapping_files),
+                "total_changes": total_changes,
+                "recommendation": "Proceed with caution" if risk_level == "high" else "Safe to merge"
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to predict conflict risk: {e}")
+            return {
+                "risk_score": 50,  # Default medium risk
+                "risk_level": "medium",
+                "error": str(e)
+            }
+
+    async def _suggest_branch_name(self, purpose: str, issue_id: Optional[str] = None) -> str:
+        """
+        Suggest intelligent branch name based on purpose and context.
+
+        Args:
+            purpose: Branch purpose (feature, fix, hotfix, chore, docs, test, etc.)
+            issue_id: Optional issue/ticket ID
+
+        Returns:
+            Suggested branch name
+        """
+        try:
+            # Clean purpose
+            purpose = purpose.lower().strip()
+            if purpose in ["feature", "feat"]:
+                prefix = "feature"
+            elif purpose in ["fix", "bugfix"]:
+                prefix = "fix"
+            elif purpose in ["hotfix"]:
+                prefix = "hotfix"
+            elif purpose in ["chore", "task"]:
+                prefix = "chore"
+            elif purpose in ["docs", "documentation"]:
+                prefix = "docs"
+            elif purpose in ["test", "testing"]:
+                prefix = "test"
+            else:
+                prefix = "feature"
+
+            # Generate descriptive slug
+            # For now, create simple timestamp-based name
+            timestamp = datetime.now().strftime("%m%d")
+            random_suffix = os.urandom(2).hex()  # 4 char random
+
+            if issue_id:
+                branch_name = f"{prefix}/{issue_id}-{timestamp}-{random_suffix}"
+            else:
+                branch_name = f"{prefix}/{timestamp}-{random_suffix}"
+
+            # Ensure branch name is valid for git
+            branch_name = re.sub(r'[^a-zA-Z0-9/._-]', '-', branch_name)
+            branch_name = branch_name.lower()
+
+            logger.info(f"Suggested branch name: {branch_name}")
+            return branch_name
+
+        except Exception as e:
+            logger.error(f"Failed to suggest branch name: {e}")
+            # Fallback to timestamp-based name
+            return f"feature/{datetime.now().strftime('%m%d')}-{os.urandom(2).hex()}"
+
+    async def _analyze_git_patterns(self) -> Dict[str, Any]:
+        """
+        Analyze git history patterns to suggest workflow improvements.
+
+        Returns:
+            Dictionary with analysis results and recommendations
+        """
+        try:
+            # Get branch statistics
+            branches = await self._execute_git_command(["branch", "-a", "--format=%(refname:short) %(committerdate:relative)"])
+            branch_lines = branches.strip().split('\n') if branches.strip() else []
+
+            # Get commit frequency (last 30 days)
+            commit_stats = await self._execute_git_command(["log", "--since='30 days ago'", "--pretty=format:%ad", "--date=short"])
+            commit_dates = commit_stats.strip().split('\n') if commit_stats.strip() else []
+            commit_count = len(commit_dates)
+
+            # Get stale branches (no commits in 90 days)
+            stale_branches = []
+            for line in branch_lines:
+                if 'origin/' in line and 'HEAD' not in line:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        branch_name = parts[0]
+                        # Check last commit date (simplified)
+                        if 'months ago' in line or 'years ago' in line:
+                            stale_branches.append(branch_name)
+
+            # Get merge frequency
+            merge_commits = await self._execute_git_command(["log", "--since='90 days ago'", "--merges", "--pretty=format:%ad", "--date=short"])
+            merge_count = len(merge_commits.strip().split('\n')) if merge_commits.strip() else 0
+
+            # Generate recommendations
+            recommendations = []
+            if len(stale_branches) > 5:
+                recommendations.append(f"Consider cleaning up {len(stale_branches)} stale branches")
+            if commit_count < 10:
+                recommendations.append("Low commit frequency - consider more regular commits")
+            if merge_count == 0 and len(branch_lines) > 3:
+                recommendations.append("No recent merges - consider merging feature branches regularly")
+
+            return {
+                "branch_count": len(branch_lines),
+                "stale_branches": stale_branches[:10],  # Limit output
+                "commit_count_30d": commit_count,
+                "merge_count_90d": merge_count,
+                "recommendations": recommendations,
+                "summary": f"Repository has {len(branch_lines)} branches, {commit_count} commits in last 30 days"
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to analyze git patterns: {e}")
+            return {
+                "error": str(e),
+                "branch_count": 0,
+                "stale_branches": [],
+                "commit_count_30d": 0,
+                "recommendations": ["Analysis failed"]
+            }
+
     # ============ Tool Implementation Methods ============
 
     async def _tool_git_status(self, **kwargs) -> Dict[str, Any]:
@@ -1007,7 +1320,9 @@ class GitOperationsAgent(DomainAgent):
             "type": "manage_branch",
             "operation": "create",
             "branch_name": kwargs.get("branch_name", ""),
-            "from_branch": kwargs.get("from_branch", None)
+            "from_branch": kwargs.get("from_branch", None),
+            "purpose": kwargs.get("purpose", "feature"),
+            "issue_id": kwargs.get("issue_id", None)
         }, None)
         return result
 
@@ -1018,6 +1333,11 @@ class GitOperationsAgent(DomainAgent):
             "operation": kwargs.get("operation", ""),
             "target_branch": kwargs.get("target_branch", None)
         }, None)
+        return result
+
+    async def _tool_git_analyze_patterns(self, **kwargs) -> Dict[str, Any]:
+        """Tool implementation for git_analyze_patterns."""
+        result = await self._analyze_git_patterns()
         return result
 
     # ============ Helper Methods ============
@@ -1213,7 +1533,10 @@ async def register_git_operations_agent() -> GitOperationsAgent:
                 "webhook_base_url": "http://localhost:5678/webhook",
                 "webhook_timeout": 10,
                 "webhook_retries": 3,
-                "webhook_events": ["commit", "push", "conflict", "branch", "rollback"]
+                "webhook_events": ["commit", "push", "conflict", "branch", "rollback"],
+                # AI-powered features
+                "enable_ai_commit_messages": True,
+                "enable_conflict_prediction": True
             }
         )
         logger.info(f"Git operations agent created and registered: {agent.name}")

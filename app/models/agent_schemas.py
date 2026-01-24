@@ -4,7 +4,7 @@ NEXUS Agent Framework - Pydantic Models
 Request and response schemas for agent-related API endpoints.
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date
 from uuid import UUID
@@ -56,6 +56,28 @@ class AgentResponse(BaseModel):
     metrics: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('config', 'metrics', mode='before')
+    @classmethod
+    def validate_dict_fields(cls, v: Any, info):
+        """Convert string '{}' to empty dict and ensure dict type for config and metrics."""
+        field_name = info.field_name
+        if isinstance(v, str):
+            # Try to parse JSON string
+            import json
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                # If it's literally '{}' or '[]' etc, return empty dict
+                if v.strip() == '{}':
+                    return {}
+                elif v.strip() == '':
+                    return {}
+                else:
+                    raise ValueError(f"Could not parse {field_name} string as JSON: {v}")
+        elif v is None:
+            return {}
+        return v
 
 
 class AgentListResponse(BaseModel):
