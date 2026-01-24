@@ -53,7 +53,7 @@ async def list_tasks(
                 content_hash="",   # Not in current query
                 status="pending",
                 created_at=task["created_at"],
-                updated_at=task["created_at"],  # TODO: Add updated_at to query
+                updated_at=task.get("updated_at", task["created_at"]),  # Use updated_at if available
                 completed_at=None
             ))
 

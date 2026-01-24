@@ -73,8 +73,9 @@ class TestAgentsAPI:
         assert response.status_code == 200
         data = response.json()
         assert "status" in data
-        assert "services" in data
         assert "timestamp" in data
+        # Note: /health endpoint returns simple health check without services field
+        # Detailed health check with services is at /health/detailed
 
     @pytest.mark.asyncio
     async def test_list_agents_success(self, client, sample_agent_response):

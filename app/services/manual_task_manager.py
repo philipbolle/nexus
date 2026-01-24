@@ -340,7 +340,7 @@ class ManualTaskManager:
         try:
             query = """
                 SELECT id, title, description, category, priority,
-                       source_system, source_id, created_at
+                       source_system, source_id, created_at, updated_at, source_context
                 FROM manual_tasks
                 WHERE status = 'pending'
             """
@@ -400,7 +400,7 @@ class ManualTaskManager:
                     tasks = await db.fetch_all(
                         """
                         SELECT id, title, description, category, priority,
-                               source_system, source_id, created_at, source_context
+                               source_system, source_id, created_at, updated_at, source_context
                         FROM manual_tasks
                         WHERE status = 'pending'
                         ORDER BY category,

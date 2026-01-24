@@ -16,8 +16,22 @@ import logging
 from ..logging_config import get_logger, log_error, log_request, log_response
 from ..exceptions.manual_tasks import ManualInterventionRequired
 from ..services.manual_task_manager import manual_task_manager
+from decimal import Decimal
+import json
 
 logger = get_logger(__name__)
+
+
+def convert_decimals(obj):
+    """Convert Decimal objects to float for JSON serialization."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {k: convert_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_decimals(item) for item in obj]
+    else:
+        return obj
 
 
 class ErrorResponse:
@@ -66,6 +80,10 @@ async def error_handler_middleware(request: Request, call_next: Callable) -> Res
 
     # Get user ID from request if available
     user_id = None
+    # Extract user ID from headers if available (X-User-ID for testing)
+    user_id_header = request.headers.get("x-user-id")
+    if user_id_header:
+        user_id = user_id_header
     # TODO: Extract user ID from authentication when implemented
     # For now, use placeholder or extract from headers if available
 
@@ -107,6 +125,8 @@ async def error_handler_middleware(request: Request, call_next: Callable) -> Res
             "errors": exc.errors(),
             "body": exc.body if hasattr(exc, "body") else None,
         }
+        # Convert Decimal objects for JSON serialization
+        error_details = convert_decimals(error_details)
 
         log_error(
             logger,
@@ -246,6 +266,8 @@ def add_error_handlers(app: FastAPI) -> None:
             "errors": exc.errors(),
             "body": exc.body if hasattr(exc, "body") else None,
         }
+        # Convert Decimal objects for JSON serialization
+        error_details = convert_decimals(error_details)
 
         log_error(
             logger,
